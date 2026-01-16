@@ -96,7 +96,7 @@ namespace Antigravity.Api.Controllers
                 if (isActive) 
                 {
                     var siteQuery = @"
-                        SELECT TOP 1 id, site_name, check_in_time 
+                        SELECT TOP 1 id, site_name, check_in_time, check_in_lat, check_in_lng 
                         FROM SiteVisits 
                         WHERE work_day_id = @workDayId AND check_out_time IS NULL 
                         ORDER BY check_in_time DESC";
@@ -108,17 +108,24 @@ namespace Antigravity.Api.Controllers
                         {
                             if (await reader.ReadAsync())
                             {
+                                double? sLat = reader.IsDBNull(3) ? null : (double)reader.GetDecimal(3);
+                                double? sLng = reader.IsDBNull(4) ? null : (double)reader.GetDecimal(4);
+                                string sAddr = null;
+                                if (sLat.HasValue && sLng.HasValue) 
+                                    sAddr = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(sLat, sLng);
+
                                 activeSite = new
                                 {
                                     name = reader.GetString(1),
-                                    checkInTime = reader.GetDateTime(2)
+                                    checkInTime = reader.GetDateTime(2),
+                                    checkInAddress = sAddr
                                 };
                             }
                         }
                     }
 
                     var breakQuery = @"
-                        SELECT TOP 1 id, start_time
+                        SELECT TOP 1 id, start_time, start_lat, start_lng
                         FROM Breaks 
                         WHERE work_day_id = @workDayId AND end_time IS NULL 
                         ORDER BY start_time DESC";
@@ -130,9 +137,16 @@ namespace Antigravity.Api.Controllers
                         {
                             if (await reader.ReadAsync())
                             {
+                                double? sLat = reader.IsDBNull(2) ? null : (double)reader.GetDecimal(2);
+                                double? sLng = reader.IsDBNull(3) ? null : (double)reader.GetDecimal(3);
+                                string sAddr = null;
+                                if (sLat.HasValue && sLng.HasValue) 
+                                    sAddr = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(sLat, sLng);
+
                                 activeBreak = new
                                 {
-                                    startTime = reader.GetDateTime(1)
+                                    startTime = reader.GetDateTime(1),
+                                    startAddress = sAddr
                                 };
                             }
                         }
@@ -142,7 +156,8 @@ namespace Antigravity.Api.Controllers
                 // Stats (Breaks list + Site Count) - Valid for ALL records TODAY
                 var breaks = new List<object>();
                 var breaksQuery = @"
-                    SELECT b.id, b.start_time, b.end_time, b.status
+                    SELECT b.id, b.start_time, b.end_time, b.status, 
+                           b.start_lat, b.start_lng, b.end_lat, b.end_lng
                     FROM Breaks b
                     JOIN WorkDays wd ON b.work_day_id = wd.id
                     WHERE wd.user_email = @email AND CAST(wd.start_time AS DATE) = CAST(GETDATE() AS DATE)
@@ -157,7 +172,26 @@ namespace Antigravity.Api.Controllers
                         {
                             var bStart = reader.GetDateTime(1);
                             DateTime? bEnd = reader.IsDBNull(2) ? null : reader.GetDateTime(2);
-                            breaks.Add(new { startTime = bStart, endTime = bEnd });
+                            
+                            double? sLat = reader.IsDBNull(4) ? null : (double)reader.GetDecimal(4);
+                            double? sLng = reader.IsDBNull(5) ? null : (double)reader.GetDecimal(5);
+                            double? eLat = reader.IsDBNull(6) ? null : (double)reader.GetDecimal(6);
+                            double? eLng = reader.IsDBNull(7) ? null : (double)reader.GetDecimal(7);
+
+                            string bStartAddress = null;
+                            if (sLat.HasValue && sLng.HasValue)
+                                bStartAddress = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(sLat, sLng);
+
+                            string bEndAddress = null;
+                            if (eLat.HasValue && eLng.HasValue)
+                                bEndAddress = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(eLat, eLng);
+
+                            breaks.Add(new { 
+                                startTime = bStart, 
+                                endTime = bEnd, 
+                                startAddress = bStartAddress, 
+                                endAddress = bEndAddress 
+                            });
                         }
                     }
                 }

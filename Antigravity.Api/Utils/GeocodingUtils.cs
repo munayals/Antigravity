@@ -21,7 +21,9 @@ namespace Antigravity.Api.Utils
 
             try
             {
-                var url = $"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat.Value}&lon={lng.Value}&zoom=18&addressdetails=1";
+                var latStr = lat.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var lngStr = lng.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var url = $"https://nominatim.openstreetmap.org/reverse?format=json&lat={latStr}&lon={lngStr}&zoom=18&addressdetails=1";
                 var response = await _httpClient.GetAsync(url);
                 if (response.IsSuccessStatusCode)
                 {

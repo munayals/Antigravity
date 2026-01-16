@@ -12,11 +12,17 @@ namespace Antigravity.Api.Controllers
     {
         private readonly IConfiguration _configuration;
         private readonly string _connectionString;
+        private readonly Repositories.IFontaneriaRepository _repository;
+        private readonly Services.ISimpleMapper _mapper;
 
-        public WorkReportsController(IConfiguration configuration)
+        public WorkReportsController(IConfiguration configuration, 
+                                     Repositories.IFontaneriaRepository repository,
+                                     Services.ISimpleMapper mapper)
         {
             _configuration = configuration;
             _connectionString = _configuration.GetConnectionString("DefaultConnection");
+            _repository = repository;
+            _mapper = mapper;
         }
 
         [HttpGet]
@@ -106,40 +112,22 @@ namespace Antigravity.Api.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetReport(int id)
         {
-            using (var connection = new SqlConnection(_connectionString))
+            // 1. Fetch from Repository
+            var siteVisit = await _repository.GetSiteVisitByIdAsync(id);
+            
+            if (siteVisit == null)
             {
-                await connection.OpenAsync();
-                var query = "SELECT sv.*, c.descli as client_name FROM SiteVisits sv LEFT JOIN cliente c ON sv.client_id = c.codcli WHERE sv.id = @id";
-                using (var command = new SqlCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@id", id);
-                    using (var reader = await command.ExecuteReaderAsync())
-                    {
-                        if (await reader.ReadAsync())
-                        {
-                            // Simplified for the GET single report which usually returns raw DB row in Next.js
-                            // But here we can use the same DTO logic or return a dictionary for compatibility
-                            var data = new Dictionary<string, object>();
-                            for (int i = 0; i < reader.FieldCount; i++)
-                            {
-                                data[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-                            }
-
-                            // Add resolved addresses as requested in the task
-                            var latIn = data.ContainsKey("check_in_lat") && data["check_in_lat"] != null ? (double?)Convert.ToDouble(data["check_in_lat"]) : null;
-                            var lngIn = data.ContainsKey("check_in_lng") && data["check_in_lng"] != null ? (double?)Convert.ToDouble(data["check_in_lng"]) : null;
-                            var latOut = data.ContainsKey("check_out_lat") && data["check_out_lat"] != null ? (double?)Convert.ToDouble(data["check_out_lat"]) : null;
-                            var lngOut = data.ContainsKey("check_out_lng") && data["check_out_lng"] != null ? (double?)Convert.ToDouble(data["check_out_lng"]) : null;
-
-                            data["check_in_address"] = await GeocodingUtils.GetAddressAsync(latIn, lngIn);
-                            data["check_out_address"] = await GeocodingUtils.GetAddressAsync(latOut, lngOut);
-
-                            return Ok(data);
-                        }
-                    }
-                }
+                return NotFound();
             }
-            return NotFound();
+
+            // 2. Map to DTO
+            var report = _mapper.Map<WorkReportDto>(siteVisit);
+
+            // 3. Resolve Addresses (Logic remains in Controller/Service layer as it involves external API)
+            report.CheckInAddress = await GeocodingUtils.GetAddressAsync(report.CheckInLoc?.Lat, report.CheckInLoc?.Lng);
+            report.CheckOutAddress = await GeocodingUtils.GetAddressAsync(report.CheckOutLoc?.Lat, report.CheckOutLoc?.Lng);
+
+            return Ok(report);
         }
 
         [HttpPut("{id}")]

@@ -22,6 +22,10 @@ builder.Services.AddCors(options =>
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 // Note: Controllers use ADO.NET directly with SqlClient, no EF Core needed
 
+// Repositories & Services
+builder.Services.AddScoped<Antigravity.Api.Repositories.IFontaneriaRepository, Antigravity.Api.Repositories.FontaneriaRepository>();
+builder.Services.AddScoped<Antigravity.Api.Services.ISimpleMapper, Antigravity.Api.Services.SimpleMapper>();
+
 
 var app = builder.Build();
 
