@@ -62,12 +62,12 @@ namespace Antigravity.Api.Controllers
                                 StartTime = reader.IsDBNull(2) ? null : reader.GetDateTime(2),
                                 EndTime = reader.IsDBNull(3) ? null : reader.GetDateTime(3),
                                 CheckInLoc = new LocationDto { 
-                                    Lat = reader.IsDBNull(4) ? null : reader.GetDouble(4), 
-                                    Lng = reader.IsDBNull(5) ? null : reader.GetDouble(5) 
+                                    Lat = reader.IsDBNull(4) ? null : (double)reader.GetDecimal(4), 
+                                    Lng = reader.IsDBNull(5) ? null : (double)reader.GetDecimal(5) 
                                 },
                                 CheckOutLoc = new LocationDto { 
-                                    Lat = reader.IsDBNull(6) ? null : reader.GetDouble(6), 
-                                    Lng = reader.IsDBNull(7) ? null : reader.GetDouble(7) 
+                                    Lat = reader.IsDBNull(6) ? null : (double)reader.GetDecimal(6), 
+                                    Lng = reader.IsDBNull(7) ? null : (double)reader.GetDecimal(7) 
                                 },
                                 Description = reader.IsDBNull(8) ? "" : reader.GetString(8),
                                 AttachmentPath = reader.IsDBNull(9) ? null : reader.GetString(9),
@@ -126,10 +126,10 @@ namespace Antigravity.Api.Controllers
                             }
 
                             // Add resolved addresses as requested in the task
-                            var latIn = data.ContainsKey("check_in_lat") ? (double?)data["check_in_lat"] : null;
-                            var lngIn = data.ContainsKey("check_in_lng") ? (double?)data["check_in_lng"] : null;
-                            var latOut = data.ContainsKey("check_out_lat") ? (double?)data["check_out_lat"] : null;
-                            var lngOut = data.ContainsKey("check_out_lng") ? (double?)data["check_out_lng"] : null;
+                            var latIn = data.ContainsKey("check_in_lat") && data["check_in_lat"] != null ? (double?)Convert.ToDouble(data["check_in_lat"]) : null;
+                            var lngIn = data.ContainsKey("check_in_lng") && data["check_in_lng"] != null ? (double?)Convert.ToDouble(data["check_in_lng"]) : null;
+                            var latOut = data.ContainsKey("check_out_lat") && data["check_out_lat"] != null ? (double?)Convert.ToDouble(data["check_out_lat"]) : null;
+                            var lngOut = data.ContainsKey("check_out_lng") && data["check_out_lng"] != null ? (double?)Convert.ToDouble(data["check_out_lng"]) : null;
 
                             data["check_in_address"] = await GeocodingUtils.GetAddressAsync(latIn, lngIn);
                             data["check_out_address"] = await GeocodingUtils.GetAddressAsync(latOut, lngOut);

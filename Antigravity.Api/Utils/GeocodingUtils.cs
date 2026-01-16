@@ -12,6 +12,7 @@ namespace Antigravity.Api.Utils
         static GeocodingUtils()
         {
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "AntigravityWorkReports/1.0");
+            _httpClient.DefaultRequestHeaders.Add("Accept-Language", "es-ES,es;q=0.9");
         }
 
         public static async Task<string> GetAddressAsync(double? lat, double? lng)
@@ -29,11 +30,40 @@ namespace Antigravity.Api.Utils
                     var addr = data["address"];
                     if (addr != null)
                     {
-                        var street = addr["road"]?.ToString() ?? addr["pedestrian"]?.ToString() ?? addr["suburb"]?.ToString() ?? "";
+                        // Priority: road -> pedestrian -> suburb -> neighbourhood
+                        var street = addr["road"]?.ToString() 
+                                  ?? addr["pedestrian"]?.ToString() 
+                                  ?? addr["street"]?.ToString()
+                                  ?? "";
+
+                        var houseNumber = addr["house_number"]?.ToString() ?? "";
                         var postcode = addr["postcode"]?.ToString() ?? "";
-                        var city = addr["city"]?.ToString() ?? addr["town"]?.ToString() ?? addr["village"]?.ToString() ?? "";
                         
-                        return $"{street}{(string.IsNullOrEmpty(street) ? "" : ", ")}{postcode} {city}".Trim();
+                        // Priority: city -> town -> village -> municipality -> city_district -> county
+                        var city = addr["city"]?.ToString() 
+                                ?? addr["town"]?.ToString() 
+                                ?? addr["village"]?.ToString() 
+                                ?? addr["municipality"]?.ToString() 
+                                ?? addr["city_district"]?.ToString() 
+                                ?? addr["county"]?.ToString()
+                                ?? "";
+                        
+                        // Construct address parts
+                        var parts = new System.Collections.Generic.List<string>();
+                        
+                        var streetPart = $"{street} {houseNumber}".Trim();
+                        if (!string.IsNullOrEmpty(streetPart)) parts.Add(streetPart);
+                        
+                        var locPart = $"{postcode} {city}".Trim();
+                        if (!string.IsNullOrEmpty(locPart)) parts.Add(locPart);
+
+                        // Fallback if empty (e.g. only display name in worst case, or just coord if nothing found)
+                        if (parts.Count == 0 && data["display_name"] != null)
+                        {
+                             return data["display_name"].ToString().Split(',')[0];
+                        }
+
+                        return string.Join(", ", parts);
                     }
                 }
             }
