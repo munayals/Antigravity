@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace Antigravity.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/reports/work-reports/upload")]
     public class UploadController : ControllerBase
     {
         private readonly IWebHostEnvironment _environment;

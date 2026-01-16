@@ -5,7 +5,7 @@ using Antigravity.Api.Models;
 namespace Antigravity.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/clients")]
     public class ClientsController : ControllerBase
     {
         private readonly string _connectionString;

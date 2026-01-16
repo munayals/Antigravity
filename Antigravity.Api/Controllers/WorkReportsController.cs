@@ -7,7 +7,7 @@ using System.Data;
 namespace Antigravity.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/reports/work-reports")]
     public class WorkReportsController : ControllerBase
     {
         private readonly IConfiguration _configuration;

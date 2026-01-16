@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,11 +7,21 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngularApp",
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:4200")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+});
+
 // Configure Database Connection
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+// Note: Controllers use ADO.NET directly with SqlClient, no EF Core needed
 
-builder.Services.AddDbContext<Antigravity.DAL.Data.ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
 
 var app = builder.Build();
 
@@ -22,8 +32,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection();
 app.UseStaticFiles();
+app.UseCors("AllowAngularApp");
 app.UseAuthorization();
 app.MapControllers();
 
