@@ -27,15 +27,18 @@ namespace Antigravity.Api.Controllers
             {
                 await connection.OpenAsync();
 
-                // 1. Check if there is an open WorkDay
+                // 1. Get the latest WorkDay for this user (Active OR Finished)
                 var workDayQuery = @"
-                    SELECT TOP 1 id, start_time, end_time 
+                    SELECT TOP 1 id, start_time, end_time, start_lat, start_lng, end_lat, end_lng 
                     FROM WorkDays 
-                    WHERE user_email = @email AND end_time IS NULL 
+                    WHERE user_email = @email 
                     ORDER BY start_time DESC";
                 
                 int? workDayId = null;
                 DateTime? startTime = null;
+                DateTime? endTime = null;
+                double? startLat = null, startLng = null;
+                double? endLat = null, endLng = null;
 
                 using (var command = new SqlCommand(workDayQuery, connection))
                 {
@@ -46,44 +49,146 @@ namespace Antigravity.Api.Controllers
                         {
                             workDayId = reader.GetInt32(0);
                             startTime = reader.GetDateTime(1);
+                            if (!reader.IsDBNull(2)) endTime = reader.GetDateTime(2);
+                            if (!reader.IsDBNull(3)) startLat = (double)reader.GetDecimal(3);
+                            if (!reader.IsDBNull(4)) startLng = (double)reader.GetDecimal(4);
+                            if (!reader.IsDBNull(5)) endLat = (double)reader.GetDecimal(5);
+                            if (!reader.IsDBNull(6)) endLng = (double)reader.GetDecimal(6);
                         }
                     }
                 }
 
-                if (workDayId == null)
+                // If no record, or the latest record is from a previous day and is completed...
+                // Then "Jornada no iniciada".
+                // logic: If (active) OR (isToday) -> Show details.
+                // Else -> Show empty.
+
+                bool isActive = (workDayId != null && endTime == null);
+                bool isToday = (workDayId != null && startTime.Value.Date == DateTime.Today);
+
+                if (!isActive && !isToday)
                 {
-                    return Ok(new { isWorking = false });
+                     return Ok(new { isWorking = false });
                 }
 
-                // 2. Check if there is an active SiteVisit for this WorkDay
-                var siteQuery = @"
-                    SELECT TOP 1 id, site_name, check_in_time 
-                    FROM SiteVisits 
-                    WHERE work_day_id = @workDayId AND check_out_time IS NULL 
-                    ORDER BY check_in_time DESC";
+                // Resolve Addresses
+                string startAddress = null;
+                string endAddress = null;
+                if (startLat != null && startLng != null)
+                {
+                    startAddress = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(startLat.Value, startLng.Value);
+                }
+                if (endLat != null && endLng != null)
+                {
+                    endAddress = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(endLat.Value, endLng.Value);
+                }
+
+                // ... The rest of the logic (Sites, Breaks, Stats) depends on workDayId
+                
+                // 3. Status checks (Sites/Breaks) - only relevant if ACTIVE (or strictly for stats)
+                // Actually, stats (daily site count) are relevant even if finished today.
+                // Active Site/Break checks are only relevant if isWorking/isActive.
 
                 object activeSite = null;
-                using (var command = new SqlCommand(siteQuery, connection))
+                object activeBreak = null;
+                
+                // Only check for active site/break if the day is physically active
+                if (isActive) 
                 {
-                    command.Parameters.AddWithValue("@workDayId", workDayId.Value);
-                    using (var reader = await command.ExecuteReaderAsync())
+                    var siteQuery = @"
+                        SELECT TOP 1 id, site_name, check_in_time 
+                        FROM SiteVisits 
+                        WHERE work_day_id = @workDayId AND check_out_time IS NULL 
+                        ORDER BY check_in_time DESC";
+
+                    using (var command = new SqlCommand(siteQuery, connection))
                     {
-                        if (await reader.ReadAsync())
+                        command.Parameters.AddWithValue("@workDayId", workDayId.Value);
+                        using (var reader = await command.ExecuteReaderAsync())
                         {
-                            activeSite = new
+                            if (await reader.ReadAsync())
                             {
-                                name = reader.GetString(1),
-                                checkInTime = reader.GetDateTime(2)
-                            };
+                                activeSite = new
+                                {
+                                    name = reader.GetString(1),
+                                    checkInTime = reader.GetDateTime(2)
+                                };
+                            }
                         }
                     }
+
+                    var breakQuery = @"
+                        SELECT TOP 1 id, start_time
+                        FROM Breaks 
+                        WHERE work_day_id = @workDayId AND end_time IS NULL 
+                        ORDER BY start_time DESC";
+
+                    using (var command = new SqlCommand(breakQuery, connection))
+                    {
+                        command.Parameters.AddWithValue("@workDayId", workDayId.Value);
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            if (await reader.ReadAsync())
+                            {
+                                activeBreak = new
+                                {
+                                    startTime = reader.GetDateTime(1)
+                                };
+                            }
+                        }
+                    }
+                }
+
+                // Stats (Breaks list + Site Count) - Valid for ALL records TODAY
+                var breaks = new List<object>();
+                var breaksQuery = @"
+                    SELECT b.id, b.start_time, b.end_time, b.status
+                    FROM Breaks b
+                    JOIN WorkDays wd ON b.work_day_id = wd.id
+                    WHERE wd.user_email = @email AND CAST(wd.start_time AS DATE) = CAST(GETDATE() AS DATE)
+                    ORDER BY b.start_time DESC";
+
+                using (var command = new SqlCommand(breaksQuery, connection))
+                {
+                    command.Parameters.AddWithValue("@email", GetUserEmail());
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            var bStart = reader.GetDateTime(1);
+                            DateTime? bEnd = reader.IsDBNull(2) ? null : reader.GetDateTime(2);
+                            breaks.Add(new { startTime = bStart, endTime = bEnd });
+                        }
+                    }
+                }
+
+                // Count sites for ALL workdays TODAY
+                var siteCountQuery = @"
+                    SELECT COUNT(*) 
+                    FROM SiteVisits sv
+                    JOIN WorkDays wd ON sv.work_day_id = wd.id
+                    WHERE wd.user_email = @email AND CAST(wd.start_time AS DATE) = CAST(GETDATE() AS DATE)";
+                
+                int siteVisitCount = 0;
+                using (var command = new SqlCommand(siteCountQuery, connection))
+                {
+                    command.Parameters.AddWithValue("@email", GetUserEmail());
+                    siteVisitCount = (int)await command.ExecuteScalarAsync();
                 }
 
                 return Ok(new
                 {
-                    isWorking = true,
+                    isWorking = isActive, // True only if NOT finished
                     startTime = startTime,
-                    activeSite = activeSite
+                    endTime = endTime,
+                    startAddress = startAddress,
+                    endAddress = endAddress,
+                    activeSite = activeSite,
+                    activeBreak = activeBreak,
+                    dailyStats = new {
+                        siteVisitCount = siteVisitCount,
+                        breaks = breaks
+                    }
                 });
             }
         }
@@ -192,6 +297,70 @@ namespace Antigravity.Api.Controllers
                     WHERE wd.user_email = @email 
                     AND wd.end_time IS NULL
                     AND sv.check_out_time IS NULL";
+
+                using (var command = new SqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@email", GetUserEmail());
+                    command.Parameters.AddWithValue("@time", DateTime.Now);
+                    command.Parameters.AddWithValue("@lat", loc.Lat ?? (object)DBNull.Value);
+                    command.Parameters.AddWithValue("@lng", loc.Lng ?? (object)DBNull.Value);
+
+                    await command.ExecuteNonQueryAsync();
+                }
+            }
+            return Ok();
+        }
+
+        [HttpPost("break/start")]
+        public async Task<IActionResult> StartBreak([FromBody] LocationRequest loc)
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+
+                // Get current WorkDay ID
+                var wdIdQuery = "SELECT TOP 1 id FROM WorkDays WHERE user_email = @email AND end_time IS NULL ORDER BY start_time DESC";
+                int workDayId;
+                using (var cmd = new SqlCommand(wdIdQuery, connection))
+                {
+                    cmd.Parameters.AddWithValue("@email", GetUserEmail());
+                    var result = await cmd.ExecuteScalarAsync();
+                    if (result == null) return BadRequest("No active work day");
+                    workDayId = (int)result;
+                }
+
+                var query = @"
+                    INSERT INTO Breaks (work_day_id, start_time, start_lat, start_lng, status)
+                    VALUES (@wdId, @time, @lat, @lng, 'ACTIVE')";
+
+                using (var command = new SqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@wdId", workDayId);
+                    command.Parameters.AddWithValue("@time", DateTime.Now);
+                    command.Parameters.AddWithValue("@lat", loc.Lat ?? (object)DBNull.Value);
+                    command.Parameters.AddWithValue("@lng", loc.Lng ?? (object)DBNull.Value);
+
+                    await command.ExecuteNonQueryAsync();
+                }
+            }
+            return Ok();
+        }
+
+        [HttpPost("break/end")]
+        public async Task<IActionResult> EndBreak([FromBody] LocationRequest loc)
+        {
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+                
+                var query = @"
+                    UPDATE b
+                    SET b.end_time = @time, b.end_lat = @lat, b.end_lng = @lng, b.status = 'COMPLETED'
+                    FROM Breaks b
+                    JOIN WorkDays wd ON b.work_day_id = wd.id
+                    WHERE wd.user_email = @email 
+                    AND wd.end_time IS NULL
+                    AND b.end_time IS NULL";
 
                 using (var command = new SqlCommand(query, connection))
                 {
