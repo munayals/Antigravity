@@ -30,22 +30,29 @@ namespace Antigravity.Api.Utils
                     var addr = data["address"];
                     if (addr != null)
                     {
-                        // Priority: road -> pedestrian -> suburb -> neighbourhood
+                        // Priority: road -> pedestrian -> suburb -> neighbourhood -> street -> square -> ...
                         var street = addr["road"]?.ToString() 
                                   ?? addr["pedestrian"]?.ToString() 
+                                  ?? addr["suburb"]?.ToString()
+                                  ?? addr["neighbourhood"]?.ToString()
                                   ?? addr["street"]?.ToString()
+                                  ?? addr["square"]?.ToString()
+                                  ?? addr["tourism"]?.ToString()
+                                  ?? addr["historic"]?.ToString()
+                                  ?? addr["amenity"]?.ToString()
                                   ?? "";
 
                         var houseNumber = addr["house_number"]?.ToString() ?? "";
                         var postcode = addr["postcode"]?.ToString() ?? "";
                         
-                        // Priority: city -> town -> village -> municipality -> city_district -> county
+                        // Priority: city -> town -> village -> municipality -> city_district -> county -> state_district
                         var city = addr["city"]?.ToString() 
                                 ?? addr["town"]?.ToString() 
                                 ?? addr["village"]?.ToString() 
                                 ?? addr["municipality"]?.ToString() 
                                 ?? addr["city_district"]?.ToString() 
                                 ?? addr["county"]?.ToString()
+                                ?? addr["state_district"]?.ToString()
                                 ?? "";
                         
                         // Construct address parts
