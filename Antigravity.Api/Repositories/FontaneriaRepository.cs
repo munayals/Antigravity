@@ -3,15 +3,21 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Data.SqlClient;
 using Antigravity.Api.Models;
+using Antigravity.Api.Data;
 
 namespace Antigravity.Api.Repositories
 {
     public class FontaneriaRepository : RepositoryBase, IFontaneriaRepository
     {
-        public FontaneriaRepository(IConfiguration configuration) : base(configuration)
+        private readonly FontaneriaContext _context;
+
+        public FontaneriaRepository(IConfiguration configuration, FontaneriaContext context) : base(configuration)
         {
+            _context = context;
         }
 
+
+        
         public async Task<SiteVisit> GetSiteVisitByIdAsync(int id)
         {
             using (var connection = new SqlConnection(_connectionString))
@@ -57,6 +63,16 @@ namespace Antigravity.Api.Repositories
                 }
             }
             return null;
+        }
+
+        public void Add(Aviso aviso)
+        {
+            _context.Avisos.Add(aviso);
+        }
+
+        public async Task SaveChangesAsync()
+        {
+            await _context.SaveChangesAsync();
         }
     }
 }

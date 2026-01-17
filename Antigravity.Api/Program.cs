@@ -1,5 +1,8 @@
 
 
+using Microsoft.EntityFrameworkCore;
+using Antigravity.Api.Data;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -20,7 +23,8 @@ builder.Services.AddCors(options =>
 
 // Configure Database Connection
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-// Note: Controllers use ADO.NET directly with SqlClient, no EF Core needed
+builder.Services.AddDbContext<FontaneriaContext>(options =>
+    options.UseSqlServer(connectionString));
 
 // Repositories & Services
 builder.Services.AddScoped<Antigravity.Api.Repositories.IFontaneriaRepository, Antigravity.Api.Repositories.FontaneriaRepository>();

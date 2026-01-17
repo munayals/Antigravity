@@ -17,6 +17,9 @@ namespace Antigravity.Api.Models
         
         [System.Text.Json.Serialization.JsonPropertyName("clientName")]
         public string? ClientName { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("clientId")]
+        public int? ClientId { get; set; }
         
         [System.Text.Json.Serialization.JsonPropertyName("startTime")]
         public DateTime? StartTime { get; set; }
@@ -65,4 +68,39 @@ namespace Antigravity.Api.Models
         public string? Description { get; set; }
         public string? AttachmentPath { get; set; }
     }
+
+    public class DayTimelineDto
+    {
+        public DateTime Date { get; set; }
+        public DateTime? StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public string TotalDuration { get; set; }
+        
+        // Stats
+        public int MinutesSite { get; set; }
+        public int MinutesBreak { get; set; }
+        public int MinutesGap { get; set; }
+        
+        // Formatted Stats
+        public string DurationSite { get; set; }
+        public string DurationBreak { get; set; }
+        public string DurationGap { get; set; }
+
+        public List<TimelineEventDto> Events { get; set; } = new List<TimelineEventDto>();
+    }
+
+    public class TimelineEventDto
+    {
+        public string Id { get; set; }
+        public string Type { get; set; }
+        public string Title { get; set; }
+        public string SubTitle { get; set; }
+        public DateTime Start { get; set; }
+        public DateTime? End { get; set; }
+        public int DurationMinutes { get; set; }
+        public string DurationFormatted { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+
 }

@@ -21,6 +21,7 @@ namespace Antigravity.Api.Services
                     Id = visit.Id,
                     SiteName = visit.SiteName ?? "",
                     ClientName = visit.ClientName ?? "",
+                    ClientId = visit.ClientId,
                     StartTime = visit.CheckInTime,
                     EndTime = visit.CheckOutTime,
                     Description = visit.Description ?? "",

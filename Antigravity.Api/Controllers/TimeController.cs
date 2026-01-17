@@ -66,95 +66,21 @@ namespace Antigravity.Api.Controllers
                 bool isActive = (workDayId != null && endTime == null);
                 bool isToday = (workDayId != null && startTime.Value.Date == DateTime.Today);
 
-                if (!isActive && !isToday)
-                {
-                     return Ok(new { isWorking = false });
-                }
-
-                // Resolve Addresses
-                string startAddress = null;
-                string endAddress = null;
-                if (startLat != null && startLng != null)
-                {
-                    startAddress = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(startLat.Value, startLng.Value);
-                }
-                if (endLat != null && endLng != null)
-                {
-                    endAddress = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(endLat.Value, endLng.Value);
-                }
-
-                // ... The rest of the logic (Sites, Breaks, Stats) depends on workDayId
-                
-                // 3. Status checks (Sites/Breaks) - only relevant if ACTIVE (or strictly for stats)
-                // Actually, stats (daily site count) are relevant even if finished today.
-                // Active Site/Break checks are only relevant if isWorking/isActive.
-
-                object activeSite = null;
-                object activeBreak = null;
-                
-                // Only check for active site/break if the day is physically active
-                if (isActive) 
-                {
-                    var siteQuery = @"
-                        SELECT TOP 1 id, site_name, check_in_time, check_in_lat, check_in_lng 
-                        FROM SiteVisits 
-                        WHERE work_day_id = @workDayId AND check_out_time IS NULL 
-                        ORDER BY check_in_time DESC";
-
-                    using (var command = new SqlCommand(siteQuery, connection))
-                    {
-                        command.Parameters.AddWithValue("@workDayId", workDayId.Value);
-                        using (var reader = await command.ExecuteReaderAsync())
-                        {
-                            if (await reader.ReadAsync())
-                            {
-                                double? sLat = reader.IsDBNull(3) ? null : (double)reader.GetDecimal(3);
-                                double? sLng = reader.IsDBNull(4) ? null : (double)reader.GetDecimal(4);
-                                string sAddr = null;
-                                if (sLat.HasValue && sLng.HasValue) 
-                                    sAddr = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(sLat, sLng);
-
-                                activeSite = new
-                                {
-                                    name = reader.GetString(1),
-                                    checkInTime = reader.GetDateTime(2),
-                                    checkInAddress = sAddr
-                                };
-                            }
-                        }
-                    }
-
-                    var breakQuery = @"
-                        SELECT TOP 1 id, start_time, start_lat, start_lng
-                        FROM Breaks 
-                        WHERE work_day_id = @workDayId AND end_time IS NULL 
-                        ORDER BY start_time DESC";
-
-                    using (var command = new SqlCommand(breakQuery, connection))
-                    {
-                        command.Parameters.AddWithValue("@workDayId", workDayId.Value);
-                        using (var reader = await command.ExecuteReaderAsync())
-                        {
-                            if (await reader.ReadAsync())
-                            {
-                                double? sLat = reader.IsDBNull(2) ? null : (double)reader.GetDecimal(2);
-                                double? sLng = reader.IsDBNull(3) ? null : (double)reader.GetDecimal(3);
-                                string sAddr = null;
-                                if (sLat.HasValue && sLng.HasValue) 
-                                    sAddr = await Antigravity.Api.Utils.GeocodingUtils.GetAddressAsync(sLat, sLng);
-
-                                activeBreak = new
-                                {
-                                    startTime = reader.GetDateTime(1),
-                                    startAddress = sAddr
-                                };
-                            }
-                        }
-                    }
-                }
-
-                // Stats (Breaks list + Site Count) - Valid for ALL records TODAY
+                // Stats variables initialization
                 var breaks = new List<object>();
+                int breakDurationMinutes = 0;
+                int siteVisitCount = 0;
+                int siteVisitDurationMinutes = 0;
+
+                // Only calculate Calculate stats if there is a workday today (active or finished)
+                // Actually, if we want "Daily Stats", we should query regardless of 'isActive' logic, 
+                // but strictly speaking, we need a reference to 'today'.
+                // The queries below filter by CAST(GETDATE() AS DATE), so they are safe to run even if 'isActive' is false,
+                // AS LONG AS there could be data. If 'workDayId' is null, it means no last workday? 
+                // No, queries use 'wd.start_time', so they are independent of the specific 'workDayId' variable derived above.
+                // So we can ALWAYS run the stats queries for "Today".
+
+                // Stats (Breaks list + count + total duration)
                 var breaksQuery = @"
                     SELECT b.id, b.start_time, b.end_time, b.status, 
                            b.start_lat, b.start_lng, b.end_lat, b.end_lng
@@ -173,6 +99,10 @@ namespace Antigravity.Api.Controllers
                             var bStart = reader.GetDateTime(1);
                             DateTime? bEnd = reader.IsDBNull(2) ? null : reader.GetDateTime(2);
                             
+                            // Calculate duration for this break
+                            var endCalc = bEnd ?? DateTime.Now;
+                            breakDurationMinutes += (int)(endCalc - bStart).TotalMinutes;
+
                             double? sLat = reader.IsDBNull(4) ? null : (double)reader.GetDecimal(4);
                             double? sLng = reader.IsDBNull(5) ? null : (double)reader.GetDecimal(5);
                             double? eLat = reader.IsDBNull(6) ? null : (double)reader.GetDecimal(6);
@@ -196,18 +126,29 @@ namespace Antigravity.Api.Controllers
                     }
                 }
 
-                // Count sites for ALL workdays TODAY
-                var siteCountQuery = @"
-                    SELECT COUNT(*) 
+                // Count sites and duration for ALL workdays TODAY
+                var siteStatsQuery = @"
+                    SELECT 
+                        sv.check_in_time, sv.check_out_time
                     FROM SiteVisits sv
                     JOIN WorkDays wd ON sv.work_day_id = wd.id
                     WHERE wd.user_email = @email AND CAST(wd.start_time AS DATE) = CAST(GETDATE() AS DATE)";
                 
-                int siteVisitCount = 0;
-                using (var command = new SqlCommand(siteCountQuery, connection))
+                using (var command = new SqlCommand(siteStatsQuery, connection))
                 {
                     command.Parameters.AddWithValue("@email", GetUserEmail());
-                    siteVisitCount = (int)await command.ExecuteScalarAsync();
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            siteVisitCount++;
+                            var checkIn = reader.GetDateTime(0);
+                            DateTime? checkOut = reader.IsDBNull(1) ? null : reader.GetDateTime(1);
+                            
+                            var endCalc = checkOut ?? DateTime.Now;
+                            siteVisitDurationMinutes += (int)(endCalc - checkIn).TotalMinutes;
+                        }
+                    }
                 }
 
                 return Ok(new
@@ -215,13 +156,15 @@ namespace Antigravity.Api.Controllers
                     isWorking = isActive, // True only if NOT finished
                     startTime = startTime,
                     endTime = endTime,
-                    startAddress = startAddress,
-                    endAddress = endAddress,
-                    activeSite = activeSite,
-                    activeBreak = activeBreak,
+                    //startAddress = startAddress,
+                    //endAddress = endAddress,
+                    //activeSite = activeSite,
+                    //activeBreak = activeBreak,
                     dailyStats = new {
                         siteVisitCount = siteVisitCount,
-                        breaks = breaks
+                        siteVisitDurationMinutes = siteVisitDurationMinutes,
+                        breaks = breaks,
+                        breakDurationMinutes = breakDurationMinutes
                     }
                 });
             }
@@ -292,23 +235,57 @@ namespace Antigravity.Api.Controllers
                 {
                     cmd.Parameters.AddWithValue("@email", GetUserEmail());
                     var result = await cmd.ExecuteScalarAsync();
-                    if (result == null) return BadRequest("No active work day");
-                    workDayId = (int)result;
+                    
+                    if (result == null) 
+                    {
+                        // Auto-Start WorkDay
+                        var insertDay = @"
+                            INSERT INTO WorkDays (user_email, start_time, start_lat, start_lng, status)
+                            OUTPUT INSERTED.ID
+                            VALUES (@email, @start, @lat, @lng, 'ACTIVE')";
+
+                        using (var insertCmd = new SqlCommand(insertDay, connection))
+                        {
+                            insertCmd.Parameters.AddWithValue("@email", GetUserEmail());
+                            insertCmd.Parameters.AddWithValue("@start", DateTime.Now);
+                            insertCmd.Parameters.AddWithValue("@lat", req.Lat ?? (object)DBNull.Value);
+                            insertCmd.Parameters.AddWithValue("@lng", req.Lng ?? (object)DBNull.Value);
+                            
+                            workDayId = (int)await insertCmd.ExecuteScalarAsync();
+                        }
+                    }
+                    else
+                    {
+                        workDayId = (int)result;
+                    }
                 }
 
                 var query = @"
-                    INSERT INTO SiteVisits (work_day_id, site_name, check_in_time, check_in_lat, check_in_lng, status)
-                    VALUES (@wdId, @name, @time, @lat, @lng, 'ACTIVE')";
+                    INSERT INTO SiteVisits (work_day_id, site_name, client_id, aviso_id, check_in_time, check_in_lat, check_in_lng, status)
+                    VALUES (@wdId, @name, @clientId, @avisoId, @time, @lat, @lng, 'ACTIVE')";
 
                 using (var command = new SqlCommand(query, connection))
                 {
                     command.Parameters.AddWithValue("@wdId", workDayId);
                     command.Parameters.AddWithValue("@name", req.SiteName);
+                    command.Parameters.AddWithValue("@clientId", req.ClientId ?? (object)DBNull.Value);
+                    command.Parameters.AddWithValue("@avisoId", req.AvisoId ?? (object)DBNull.Value);
                     command.Parameters.AddWithValue("@time", DateTime.Now);
                     command.Parameters.AddWithValue("@lat", req.Lat ?? (object)DBNull.Value);
                     command.Parameters.AddWithValue("@lng", req.Lng ?? (object)DBNull.Value);
 
                     await command.ExecuteNonQueryAsync();
+                }
+
+                // If starting from an Aviso, update its status
+                if (req.AvisoId.HasValue)
+                {
+                    var updateAviso = "UPDATE Avisos SET status = 'EN PROGRESO' WHERE id = @avisoId";
+                    using (var command = new SqlCommand(updateAviso, connection))
+                    {
+                        command.Parameters.AddWithValue("@avisoId", req.AvisoId.Value);
+                        await command.ExecuteNonQueryAsync();
+                    }
                 }
             }
             return Ok();
@@ -321,8 +298,24 @@ namespace Antigravity.Api.Controllers
             {
                 await connection.OpenAsync();
                 
-                // Update the most recent open site visit for this user's current workday
-                // Complex join: SiteVisit -> WorkDay -> User
+                // 1. Mark linked Aviso as REALIZADO (if any)
+                var updateAviso = @"
+                    UPDATE a
+                    SET a.status = 'REALIZADO'
+                    FROM Avisos a
+                    JOIN SiteVisits sv ON sv.aviso_id = a.id
+                    JOIN WorkDays wd ON sv.work_day_id = wd.id
+                    WHERE wd.user_email = @email 
+                    AND wd.end_time IS NULL
+                    AND sv.check_out_time IS NULL";
+
+                using (var command = new SqlCommand(updateAviso, connection))
+                {
+                    command.Parameters.AddWithValue("@email", GetUserEmail());
+                    await command.ExecuteNonQueryAsync();
+                }
+
+                // 2. Update the SiteVisit to COMPLETED
                 var query = @"
                     UPDATE sv
                     SET sv.check_out_time = @time, sv.check_out_lat = @lat, sv.check_out_lng = @lng, sv.status = 'COMPLETED'
@@ -408,8 +401,204 @@ namespace Antigravity.Api.Controllers
             }
             return Ok();
         }
-    }
+        [HttpGet("history")]
+        public async Task<IActionResult> GetHistory([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        {
+            var start = startDate ?? DateTime.Today;
+            var end = endDate ?? DateTime.Today;
+            
+            // Adjust end to include the full day
+            end = end.Date.AddDays(1).AddTicks(-1);
 
+            var timeline = new List<DayTimelineDto>();
+
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync();
+
+                // 1. Get WorkDays in range
+                var workDaysQuery = @"
+                    SELECT id, start_time, end_time 
+                    FROM WorkDays 
+                    WHERE user_email = @email 
+                    AND start_time >= @start AND start_time <= @end
+                    ORDER BY start_time DESC";
+
+                var workDays = new List<dynamic>();
+
+                using (var command = new SqlCommand(workDaysQuery, connection))
+                {
+                    command.Parameters.AddWithValue("@email", GetUserEmail());
+                    command.Parameters.AddWithValue("@start", start);
+                    command.Parameters.AddWithValue("@end", end);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            workDays.Add(new {
+                                Id = reader.GetInt32(0),
+                                Start = reader.GetDateTime(1),
+                                End = reader.IsDBNull(2) ? (DateTime?)null : reader.GetDateTime(2)
+                            });
+                        }
+                    }
+                }
+
+                foreach (var wd in workDays)
+                {
+                    var dayDto = new DayTimelineDto
+                    {
+                        Date = wd.Start.Date,
+                        StartTime = wd.Start,
+                        EndTime = wd.End
+                    };
+
+                    var rawEvents = new List<TimelineEventDto>();
+
+                    // 2. Get SiteVisits for this WorkDay
+                    var sitesQuery = @"
+                        SELECT id, site_name, check_in_time, check_out_time
+                        FROM SiteVisits
+                        WHERE work_day_id = @wdId
+                        ORDER BY check_in_time";
+                    
+                    using (var cmd = new SqlCommand(sitesQuery, connection))
+                    {
+                        cmd.Parameters.AddWithValue("@wdId", wd.Id);
+                        using (var reader = await cmd.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                var sStart = reader.GetDateTime(2);
+                                var sEnd = reader.IsDBNull(3) ? (DateTime?)null : reader.GetDateTime(3);
+                                var now = DateTime.Now;
+                                var duration = (int)((sEnd ?? now) - sStart).TotalMinutes;
+
+                                rawEvents.Add(new TimelineEventDto
+                                {
+                                    Id = "site-" + reader.GetInt32(0),
+                                    Type = "SITE",
+                                    Title = reader.GetString(1),
+                                    Start = sStart,
+                                    End = sEnd,
+                                    IsActive = sEnd == null,
+                                    DurationMinutes = duration,
+                                    DurationFormatted = FormatDuration(duration)
+                                });
+                            }
+                        }
+                    }
+
+                    // 3. Get Breaks for this WorkDay
+                    var breaksQuery = @"
+                        SELECT id, start_time, end_time
+                        FROM Breaks
+                        WHERE work_day_id = @wdId
+                        ORDER BY start_time";
+                    
+                    using (var cmd = new SqlCommand(breaksQuery, connection))
+                    {
+                        cmd.Parameters.AddWithValue("@wdId", wd.Id);
+                        using (var reader = await cmd.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                var bStart = reader.GetDateTime(1);
+                                var bEnd = reader.IsDBNull(2) ? (DateTime?)null : reader.GetDateTime(2);
+                                var now = DateTime.Now;
+                                var duration = (int)((bEnd ?? now) - bStart).TotalMinutes;
+
+                                rawEvents.Add(new TimelineEventDto
+                                {
+                                    Id = "break-" + reader.GetInt32(0),
+                                    Type = "BREAK",
+                                    Title = "Descanso",
+                                    Start = bStart,
+                                    End = bEnd,
+                                    IsActive = bEnd == null,
+                                    DurationMinutes = duration,
+                                    DurationFormatted = FormatDuration(duration)
+                                });
+                            }
+                        }
+                    }
+
+                    // 4. Sort and Fill Gaps
+                    rawEvents = rawEvents.OrderBy(e => e.Start).ToList();
+                    var finalEvents = new List<TimelineEventDto>();
+                    
+                    var cursor = wd.Start; // Start tracking from WorkDay Start
+                    // Loop through sorted events
+                    foreach (var evt in rawEvents)
+                    {
+                        // If there is a gap > 1 minute between cursor and event start, add GAP
+                        if ((evt.Start - cursor).TotalMinutes > 1)
+                        {
+                            var gapMins = (int)(evt.Start - cursor).TotalMinutes;
+                            finalEvents.Add(new TimelineEventDto
+                            {
+                                Id = "gap-" + Guid.NewGuid(),
+                                Type = "GAP",
+                                Title = "Tiempo sin asignar",
+                                Start = cursor,
+                                End = evt.Start,
+                                DurationMinutes = gapMins,
+                                DurationFormatted = FormatDuration(gapMins)
+                            });
+                        }
+
+                        finalEvents.Add(evt);
+                        // Move cursor to end of event (or Now if active)
+                        cursor = evt.End ?? DateTime.Now;
+                    }
+
+                    // Check for gap at the end (until WorkDay End or Now)
+                    var dayEnd = wd.End ?? DateTime.Now;
+                    if ((dayEnd - cursor).TotalMinutes > 1)
+                    {
+                        var gapMins = (int)(dayEnd - cursor).TotalMinutes;
+                        finalEvents.Add(new TimelineEventDto
+                        {
+                            Id = "gap-end-" + Guid.NewGuid(),
+                            Type = "GAP",
+                            Title = "Tiempo sin asignar",
+                            Start = cursor,
+                            End = dayEnd,
+                            DurationMinutes = gapMins,
+                            DurationFormatted = FormatDuration(gapMins)
+                        });
+                    }
+
+                    dayDto.Events = finalEvents;
+                    
+                    // Calculate Summaries
+                    dayDto.MinutesSite = finalEvents.Where(e => e.Type == "SITE").Sum(e => e.DurationMinutes);
+                    dayDto.MinutesBreak = finalEvents.Where(e => e.Type == "BREAK").Sum(e => e.DurationMinutes);
+                    dayDto.MinutesGap = finalEvents.Where(e => e.Type == "GAP").Sum(e => e.DurationMinutes);
+                    
+                    dayDto.DurationSite = FormatDuration(dayDto.MinutesSite);
+                    dayDto.DurationBreak = FormatDuration(dayDto.MinutesBreak);
+                    dayDto.DurationGap = FormatDuration(dayDto.MinutesGap);
+                    
+                    // Calculate Total Duration of WorkDay
+                    var totalMins = (int)(dayEnd - wd.Start).TotalMinutes;
+                    dayDto.TotalDuration = FormatDuration(totalMins);
+
+                    timeline.Add(dayDto);
+                }
+            }
+
+            return Ok(timeline);
+        }
+
+        private string FormatDuration(int minutes)
+        {
+            int h = minutes / 60;
+            int m = minutes % 60;
+            return $"{h}h {m}m";
+        }
+    }
     public class LocationRequest
     {
         public double? Lat { get; set; }
@@ -419,5 +608,7 @@ namespace Antigravity.Api.Controllers
     public class SiteEnterRequest : LocationRequest
     {
         public string SiteName { get; set; }
+        public int? ClientId { get; set; }
+        public int? AvisoId { get; set; }
     }
 }
