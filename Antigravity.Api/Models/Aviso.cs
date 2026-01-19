@@ -25,6 +25,8 @@ namespace Antigravity.Api.Models
 
         [Column("user_email")]
         public string? UserEmail { get; set; }
+
+        public Client Client { get; set; }
     }
 
     public class AvisoWithClientDto : Aviso

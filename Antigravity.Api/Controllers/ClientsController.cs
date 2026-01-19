@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Antigravity.Api.Models;
+using Antigravity.Api.Data;
 
 namespace Antigravity.Api.Controllers
 {
@@ -8,36 +9,25 @@ namespace Antigravity.Api.Controllers
     [Route("api/clients")]
     public class ClientsController : ControllerBase
     {
-        private readonly string _connectionString;
+        private readonly FontaneriaContext _context;
 
-        public ClientsController(IConfiguration configuration)
+        public ClientsController(FontaneriaContext context)
         {
-            _connectionString = configuration.GetConnectionString("DefaultConnection");
+            _context = context;
         }
 
         [HttpGet]
         public async Task<IActionResult> GetClients()
         {
-            var clients = new List<ClientDto>();
-            using (var connection = new SqlConnection(_connectionString))
-            {
-                await connection.OpenAsync();
-                var query = "SELECT codcli, descli FROM cliente ORDER BY descli ASC";
-                using (var command = new SqlCommand(query, connection))
+            var clients = await _context.Clients
+                .OrderBy(c => c.Name)
+                .Select(c => new 
                 {
-                    using (var reader = await command.ExecuteReaderAsync())
-                    {
-                        while (await reader.ReadAsync())
-                        {
-                            clients.Add(new ClientDto
-                            {
-                                Id = reader.GetInt32(0),
-                                Name = reader.GetString(1)
-                            });
-                        }
-                    }
-                }
-            }
+                    Id = c.Id,
+                    Name = c.Name
+                })
+                .ToListAsync();
+
             return Ok(clients);
         }
     }

@@ -32,6 +32,9 @@ namespace Antigravity.Api.Data
                     entity.ToTable("Avisos");
                     entity.HasKey(e => e.Id);
                     entity.Property(e => e.Id).ValueGeneratedOnAdd();
+                    entity.HasOne(a => a.Client)
+                          .WithMany()
+                          .HasForeignKey(a => a.ClientId);
                 });
 
                 modelBuilder.Entity<Client>(entity =>
@@ -39,10 +42,10 @@ namespace Antigravity.Api.Data
                     entity.ToTable("cliente"); // Legacy table name
                     entity.Property(e => e.Id).HasColumnName("codcli");
                     entity.Property(e => e.Name).HasColumnName("descli");
-                    entity.Property(e => e.Address).HasColumnName("domicilio");
-                    entity.Property(e => e.Phone).HasColumnName("telefono");
+                    entity.Property(e => e.Address).HasColumnName("dircli");
+                    entity.Property(e => e.Phone).HasColumnName("telefono1");
                     entity.Property(e => e.City).HasColumnName("pobcli");
-                    entity.Ignore(e => e.Email); // Assuming legacy table doesn't have Email or map it if it does
+                    entity.Ignore(e => e.Email);
                 });
 
                 modelBuilder.Entity<WorkDay>().ToTable("WorkDays");
@@ -52,7 +55,13 @@ namespace Antigravity.Api.Data
             else // PostgreSQL / Generic
             {
                 // Normalized Schema
-                modelBuilder.Entity<Aviso>().ToTable("Avisos"); // Keep same table name for consistency or change if needed
+                modelBuilder.Entity<Aviso>(entity =>
+                {
+                    entity.ToTable("Avisos");
+                    entity.HasOne(a => a.Client)
+                          .WithMany()
+                          .HasForeignKey(a => a.ClientId);
+                });
                 
                 modelBuilder.Entity<Client>(entity =>
                 {

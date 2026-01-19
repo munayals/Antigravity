@@ -34,6 +34,12 @@ namespace Antigravity.Api.Controllers
             bool isActive = (lastWorkDay != null && lastWorkDay.EndTime == null);
             bool isToday = (lastWorkDay != null && lastWorkDay.StartTime.Date == today);
 
+            // If the last workday was NOT today AND is not active, treat as no workday today
+            if (!isToday && !isActive)
+            {
+                lastWorkDay = null;
+            }
+
             // Stats variables
             var breaksList = new List<object>();
             int breakDurationMinutes = 0;
