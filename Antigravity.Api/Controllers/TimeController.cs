@@ -89,17 +89,89 @@ namespace Antigravity.Api.Controllers
                 siteVisitDurationMinutes += (int)(endCalc - sv.CheckInTime).TotalMinutes;
             }
 
+            // Get all sessions for TODAY
+            var todayWorkDays = await _context.WorkDays
+                .Where(w => w.UserEmail == email && w.StartTime.Date == today)
+                .OrderBy(w => w.StartTime)
+                .ToListAsync();
+
+            var sessionsList = new List<object>();
+            foreach (var wd in todayWorkDays)
+            {
+                sessionsList.Add(new
+                {
+                    startTime = wd.StartTime,
+                    endTime = wd.EndTime,
+                    startAddress = (string)null, // Placeholder to avoid breaking frontend if it expects strings
+                    endAddress = (string)null
+                });
+            }
+
+            // 2. Get the latest active site visit (if any)
+            var activeSite = await _context.SiteVisits
+                .Include(sv => sv.WorkDay)
+                .Where(sv => sv.WorkDay.UserEmail == email && sv.WorkDay.EndTime == null && sv.CheckOutTime == null)
+                .OrderByDescending(sv => sv.CheckInTime)
+                .FirstOrDefaultAsync();
+
+            object activeSiteDto = null;
+            if (activeSite != null)
+            {
+                string addr = null;
+                if (activeSite.CheckInLat.HasValue && activeSite.CheckInLng.HasValue)
+                    addr = await GeocodingUtils.GetAddressAsync((double)activeSite.CheckInLat, (double)activeSite.CheckInLng);
+
+                activeSiteDto = new
+                {
+                    name = activeSite.SiteName,
+                    checkInTime = activeSite.CheckInTime,
+                    checkInAddress = addr
+                };
+            }
+
+            // 3. Get the latest active break (if any)
+            var activeBreak = await _context.Breaks
+                .Include(b => b.WorkDay)
+                .Where(b => b.WorkDay.UserEmail == email && b.WorkDay.EndTime == null && b.EndTime == null)
+                .OrderByDescending(b => b.StartTime)
+                .FirstOrDefaultAsync();
+
+            object activeBreakDto = null;
+            if (activeBreak != null)
+            {
+                string addr = null;
+                if (activeBreak.StartLat.HasValue && activeBreak.StartLng.HasValue)
+                    addr = await GeocodingUtils.GetAddressAsync((double)activeBreak.StartLat, (double)activeBreak.StartLng);
+
+                activeBreakDto = new
+                {
+                    startTime = activeBreak.StartTime,
+                    startAddress = addr
+                };
+            }
+
+            // 4. Main session address (for the "Inicio" row on top if active)
+            string lastStartAddress = null;
+            if (lastWorkDay != null && lastWorkDay.StartLat.HasValue && lastWorkDay.StartLng.HasValue)
+            {
+                lastStartAddress = await GeocodingUtils.GetAddressAsync((double)lastWorkDay.StartLat, (double)lastWorkDay.StartLng);
+            }
+
             return Ok(new
             {
                 isWorking = isActive,
                 startTime = lastWorkDay?.StartTime,
                 endTime = lastWorkDay?.EndTime,
+                startAddress = lastStartAddress,
+                activeSite = activeSiteDto,
+                activeBreak = activeBreakDto,
                 dailyStats = new
                 {
                     siteVisitCount = siteVisitCount,
                     siteVisitDurationMinutes = siteVisitDurationMinutes,
                     breaks = breaksList,
-                    breakDurationMinutes = breakDurationMinutes
+                    breakDurationMinutes = breakDurationMinutes,
+                    workSessions = sessionsList
                 }
             });
         }

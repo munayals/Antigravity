@@ -40,12 +40,12 @@ namespace Antigravity.Api.Models
         [Column("check_out_lng")]
         public decimal? CheckOutLng { get; set; }
 
-        public string Description { get; set; }
-
+        public string Description { get; set; } = "";
+        
         [Column("attachment_path")]
-        public string AttachmentPath { get; set; }
+        public string AttachmentPath { get; set; } = "";
 
-        public string Status { get; set; } // 'ACTIVE', 'COMPLETED'
+        public string Status { get; set; } = "ACTIVE"; // 'ACTIVE', 'COMPLETED'
 
         // Extra property from JOIN (Not mapped to DB table directly, handle via DTO projection ideally)
         [NotMapped]

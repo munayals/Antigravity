@@ -51,6 +51,7 @@ namespace Antigravity.Api.Controllers
                  {
                      Id = sv.Id,
                      SiteName = sv.SiteName ?? "",
+                     ClientId = sv.ClientId,
                      StartTime = sv.CheckInTime,
                      EndTime = sv.CheckOutTime,
                      CheckInLoc = new LocationDto { 
@@ -126,10 +127,10 @@ namespace Antigravity.Api.Controllers
             var siteVisit = await _context.SiteVisits.FindAsync(id);
             if (siteVisit == null) return NotFound();
 
-            siteVisit.SiteName = request.SiteName;
+            siteVisit.SiteName = request.SiteName ?? "";
             siteVisit.ClientId = request.ClientId;
-            siteVisit.Description = request.Description;
-            siteVisit.AttachmentPath = request.AttachmentPath;
+            siteVisit.Description = request.Description ?? "";
+            siteVisit.AttachmentPath = request.AttachmentPath ?? "";
 
             await _context.SaveChangesAsync();
             return Ok(new { message = "Report updated successfully" });
