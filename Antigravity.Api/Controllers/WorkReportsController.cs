@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Antigravity.Api.Models;
+using Antigravity.Api.Data;
 using Antigravity.Api.Utils;
-using System.Data;
+using System.Linq;
 
 namespace Antigravity.Api.Controllers
 {
@@ -11,16 +12,17 @@ namespace Antigravity.Api.Controllers
     public class WorkReportsController : ControllerBase
     {
         private readonly IConfiguration _configuration;
-        private readonly string _connectionString;
+        private readonly FontaneriaContext _context;
         private readonly Repositories.IFontaneriaRepository _repository;
         private readonly Services.ISimpleMapper _mapper;
 
-        public WorkReportsController(IConfiguration configuration, 
+        public WorkReportsController(IConfiguration configuration,
+                                     FontaneriaContext context,
                                      Repositories.IFontaneriaRepository repository,
                                      Services.ISimpleMapper mapper)
         {
             _configuration = configuration;
-            _connectionString = _configuration.GetConnectionString("DefaultConnection");
+            _context = context;
             _repository = repository;
             _mapper = mapper;
         }
@@ -28,70 +30,58 @@ namespace Antigravity.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> GetReports([FromQuery] DateTime startDate, [FromQuery] DateTime endDate)
         {
-            // Note: In a production app, we would use the authenticated user's email from the JWT
-            // For now, mirroring the "demo" logic or taking a hardcoded email if we aren't handling auth yet.
             string userEmail = "demo@example.com"; 
 
+            // Adjust end date to include the full day
+            var endOfDay = endDate.Date.AddDays(1).AddTicks(-1);
+
+            var siteVisits = await _context.SiteVisits
+                .Include(sv => sv.WorkDay)
+                .Where(sv => sv.WorkDay.UserEmail == userEmail 
+                          && sv.CheckInTime >= startDate 
+                          && sv.CheckInTime <= endOfDay)
+                .OrderByDescending(sv => sv.CheckInTime)
+                .ToListAsync();
+
             var reports = new List<WorkReportDto>();
-
-            using (var connection = new SqlConnection(_connectionString))
+            
+            foreach (var sv in siteVisits)
             {
-                await connection.OpenAsync();
-                var query = @"
-                    SELECT 
-                        sv.id, sv.site_name, sv.check_in_time, sv.check_out_time,
-                        sv.check_in_lat, sv.check_in_lng, sv.check_out_lat, sv.check_out_lng,
-                        sv.description, sv.attachment_path,
-                        c.descli as client_name
-                    FROM SiteVisits sv
-                    JOIN WorkDays wd ON sv.work_day_id = wd.id
-                    LEFT JOIN cliente c ON sv.client_id = c.codcli
-                    WHERE wd.user_email = @email
-                    AND sv.check_in_time >= @start
-                    AND sv.check_in_time <= @end
-                    ORDER BY sv.check_in_time DESC";
+                 var report = new WorkReportDto
+                 {
+                     Id = sv.Id,
+                     SiteName = sv.SiteName ?? "",
+                     StartTime = sv.CheckInTime,
+                     EndTime = sv.CheckOutTime,
+                     CheckInLoc = new LocationDto { 
+                        Lat = sv.CheckInLat.HasValue ? (double)sv.CheckInLat.Value : null,
+                        Lng = sv.CheckInLng.HasValue ? (double)sv.CheckInLng.Value : null
+                     },
+                     CheckOutLoc = new LocationDto { 
+                        Lat = sv.CheckOutLat.HasValue ? (double)sv.CheckOutLat.Value : null,
+                        Lng = sv.CheckOutLng.HasValue ? (double)sv.CheckOutLng.Value : null
+                     },
+                     Description = sv.Description ?? "",
+                     AttachmentPath = sv.AttachmentPath,
+                     ClientName = "" // Will populate below
+                 };
 
-                using (var command = new SqlCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@email", userEmail);
-                    command.Parameters.AddWithValue("@start", startDate);
-                    command.Parameters.AddWithValue("@end", endDate.Date.AddDays(1).AddTicks(-1));
+                 // Resolve Client Name
+                 if (sv.ClientId.HasValue)
+                 {
+                     var client = await _context.Clients.FindAsync(sv.ClientId.Value);
+                     if (client != null) report.ClientName = client.Name;
+                 }
 
-                    using (var reader = await command.ExecuteReaderAsync())
-                    {
-                        while (await reader.ReadAsync())
-                        {
-                            var report = new WorkReportDto
-                            {
-                                Id = reader.GetInt32(0),
-                                SiteName = reader.IsDBNull(1) ? "" : reader.GetString(1),
-                                StartTime = reader.IsDBNull(2) ? null : reader.GetDateTime(2),
-                                EndTime = reader.IsDBNull(3) ? null : reader.GetDateTime(3),
-                                CheckInLoc = new LocationDto { 
-                                    Lat = reader.IsDBNull(4) ? null : (double)reader.GetDecimal(4), 
-                                    Lng = reader.IsDBNull(5) ? null : (double)reader.GetDecimal(5) 
-                                },
-                                CheckOutLoc = new LocationDto { 
-                                    Lat = reader.IsDBNull(6) ? null : (double)reader.GetDecimal(6), 
-                                    Lng = reader.IsDBNull(7) ? null : (double)reader.GetDecimal(7) 
-                                },
-                                Description = reader.IsDBNull(8) ? "" : reader.GetString(8),
-                                AttachmentPath = reader.IsDBNull(9) ? null : reader.GetString(9),
-                                ClientName = reader.IsDBNull(10) ? "" : reader.GetString(10)
-                            };
+                 report.LocationsMatch = report.CheckInLoc.Lat == report.CheckOutLoc.Lat && 
+                                       report.CheckInLoc.Lng == report.CheckOutLoc.Lng;
+                 
+                 report.CheckInMapUrl = report.CheckInLoc.Lat.HasValue ? 
+                     $"https://www.google.com/maps?q={report.CheckInLoc.Lat},{report.CheckInLoc.Lng}" : null;
+                 report.CheckOutMapUrl = report.CheckOutLoc.Lat.HasValue ? 
+                     $"https://www.google.com/maps?q={report.CheckOutLoc.Lat},{report.CheckOutLoc.Lng}" : null;
 
-                            report.LocationsMatch = report.CheckInLoc.Lat == report.CheckOutLoc.Lat && 
-                                                   report.CheckInLoc.Lng == report.CheckOutLoc.Lng;
-                            
-                            report.CheckInMapUrl = report.CheckInLoc.Lat.HasValue ? 
-                                $"https://www.google.com/maps?q={report.CheckInLoc.Lat},{report.CheckInLoc.Lng}" : null;
-                            report.CheckOutMapUrl = report.CheckOutLoc.Lat.HasValue ? 
-                                $"https://www.google.com/maps?q={report.CheckOutLoc.Lat},{report.CheckOutLoc.Lng}" : null;
-
-                            reports.Add(report);
-                        }
-                    }
-                }
+                 reports.Add(report);
             }
 
             // Resolve addresses in parallel
@@ -133,28 +123,15 @@ namespace Antigravity.Api.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateReport(int id, [FromBody] UpdateWorkReportRequest request)
         {
-            using (var connection = new SqlConnection(_connectionString))
-            {
-                await connection.OpenAsync();
-                var query = @"
-                    UPDATE SiteVisits 
-                    SET site_name = @siteName, 
-                        client_id = @clientId, 
-                        description = @description,
-                        attachment_path = @attachmentPath
-                    WHERE id = @id";
+            var siteVisit = await _context.SiteVisits.FindAsync(id);
+            if (siteVisit == null) return NotFound();
 
-                using (var command = new SqlCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@id", id);
-                    command.Parameters.AddWithValue("@siteName", request.SiteName ?? (object)DBNull.Value);
-                    command.Parameters.AddWithValue("@clientId", request.ClientId ?? (object)DBNull.Value);
-                    command.Parameters.AddWithValue("@description", request.Description ?? (object)DBNull.Value);
-                    command.Parameters.AddWithValue("@attachmentPath", request.AttachmentPath ?? (object)DBNull.Value);
+            siteVisit.SiteName = request.SiteName;
+            siteVisit.ClientId = request.ClientId;
+            siteVisit.Description = request.Description;
+            siteVisit.AttachmentPath = request.AttachmentPath;
 
-                    await command.ExecuteNonQueryAsync();
-                }
-            }
+            await _context.SaveChangesAsync();
             return Ok(new { message = "Report updated successfully" });
         }
     }

@@ -3,6 +3,9 @@
 using Microsoft.EntityFrameworkCore;
 using Antigravity.Api.Data;
 
+// Fix for Npgsql DateTime Kind=Unspecified error
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -23,8 +26,20 @@ builder.Services.AddCors(options =>
 
 // Configure Database Connection
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var databaseProvider = builder.Configuration.GetValue<string>("DatabaseProvider") ?? "SqlServer";
+
 builder.Services.AddDbContext<FontaneriaContext>(options =>
-    options.UseSqlServer(connectionString));
+{
+    if (databaseProvider == "PostgreSql")
+    {
+        var postgresConnection = builder.Configuration.GetConnectionString("PostgresConnection");
+        options.UseNpgsql(postgresConnection);
+    }
+    else
+    {
+        options.UseSqlServer(connectionString);
+    }
+});
 
 // Repositories & Services
 builder.Services.AddScoped<Antigravity.Api.Repositories.IFontaneriaRepository, Antigravity.Api.Repositories.FontaneriaRepository>();
