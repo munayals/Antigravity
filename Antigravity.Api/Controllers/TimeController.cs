@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Antigravity.Api.Models;
 using Antigravity.Api.Data;
 using Antigravity.Api.Utils;
+using Antigravity.Api.Services;
 
 namespace Antigravity.Api.Controllers
 {
@@ -11,10 +12,12 @@ namespace Antigravity.Api.Controllers
     public class TimeController : ControllerBase
     {
         private readonly FontaneriaContext _context;
+        private readonly IWhatsAppService _whatsAppService;
 
-        public TimeController(FontaneriaContext context)
+        public TimeController(FontaneriaContext context, IWhatsAppService whatsAppService)
         {
             _context = context;
+            _whatsAppService = whatsAppService;
         }
 
         private string GetUserEmail() => "demo@example.com";
@@ -197,6 +200,8 @@ namespace Antigravity.Api.Controllers
 
                 _context.WorkDays.Add(workDay);
                 await _context.SaveChangesAsync();
+                
+                await _whatsAppService.SendNotificationAsync($"🕒 Jornada iniciada a las {DateTime.Now:HH:mm}");
 
                 return Ok();
             }
@@ -226,6 +231,7 @@ namespace Antigravity.Api.Controllers
                 workDay.Status = "COMPLETED";
 
                 await _context.SaveChangesAsync();
+                await _whatsAppService.SendNotificationAsync($"🏁 Jornada finalizada a las {DateTime.Now:HH:mm}. Duración total: {(workDay.EndTime - workDay.StartTime)?.ToString(@"hh\:mm")}");
             }
             return Ok();
         }
@@ -254,11 +260,12 @@ namespace Antigravity.Api.Controllers
                 };
                 _context.WorkDays.Add(workDay);
                 await _context.SaveChangesAsync();
+                await _whatsAppService.SendNotificationAsync($"🕒 Jornada iniciada (auto) por entrada a sitio");
             }
 
             var siteVisit = new SiteVisit
             {
-                WorkDayId = workDay.Id, // Ensure workDay.Id is populated (it is after SaveChanges)
+                WorkDayId = workDay.Id,
                 SiteName = req.SiteName,
                 ClientId = req.ClientId,
                 AvisoId = req.AvisoId,
@@ -267,8 +274,8 @@ namespace Antigravity.Api.Controllers
                 CheckInLng = req.Lng.HasValue ? (decimal)req.Lng.Value : null,
                 CheckInClientTime = req.ClientTime,
                 Status = "ACTIVE",
-                Description = "",       // non-null default
-                AttachmentPath = ""     // non-null default
+                Description = "",       
+                AttachmentPath = ""     
             };
 
             _context.SiteVisits.Add(siteVisit);
@@ -284,6 +291,8 @@ namespace Antigravity.Api.Controllers
             }
 
             await _context.SaveChangesAsync();
+            await _whatsAppService.SendNotificationAsync($"➡️ Entrada a SITIO: {req.SiteName} a las {DateTime.Now:HH:mm}");
+
             return Ok();
         }
 
@@ -292,7 +301,6 @@ namespace Antigravity.Api.Controllers
         {
             var email = GetUserEmail();
             
-            // Find active SiteVisit for current user (via WorkDay)
             var siteVisit = await _context.SiteVisits
                 .Include(sv => sv.WorkDay)
                 .Where(sv => sv.WorkDay.UserEmail == email && sv.WorkDay.EndTime == null && sv.CheckOutTime == null)
@@ -318,6 +326,7 @@ namespace Antigravity.Api.Controllers
                 }
 
                 await _context.SaveChangesAsync();
+                await _whatsAppService.SendNotificationAsync($"⬅️ Salida de SITIO: {siteVisit.SiteName} a las {DateTime.Now:HH:mm}. Duración: {(siteVisit.CheckOutTime - siteVisit.CheckInTime)?.ToString(@"hh\:mm")}");
             }
 
             return Ok();
@@ -347,6 +356,7 @@ namespace Antigravity.Api.Controllers
 
             _context.Breaks.Add(breakObj);
             await _context.SaveChangesAsync();
+            await _whatsAppService.SendNotificationAsync($"☕ Descanso iniciado a las {DateTime.Now:HH:mm}");
 
             return Ok();
         }
@@ -371,6 +381,7 @@ namespace Antigravity.Api.Controllers
                 breakObj.Status = "COMPLETED";
 
                 await _context.SaveChangesAsync();
+                await _whatsAppService.SendNotificationAsync($"✅ Descanso finalizado a las {DateTime.Now:HH:mm}");
             }
 
             return Ok();

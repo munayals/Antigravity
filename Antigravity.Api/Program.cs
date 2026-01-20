@@ -48,6 +48,9 @@ builder.Services.AddDbContext<FontaneriaContext>(options =>
 builder.Services.AddScoped<Antigravity.Api.Repositories.IFontaneriaRepository, Antigravity.Api.Repositories.FontaneriaRepository>();
 builder.Services.AddScoped<Antigravity.Api.Services.ISimpleMapper, Antigravity.Api.Services.SimpleMapper>();
 
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<Antigravity.Api.Services.IWhatsAppService, Antigravity.Api.Services.WhatsAppService>();
+
 
 var app = builder.Build();
 
