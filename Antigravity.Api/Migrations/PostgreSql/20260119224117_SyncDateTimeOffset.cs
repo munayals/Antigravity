@@ -10,6 +10,10 @@ namespace Antigravity.Api.Migrations.PostgreSql
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Fix for bad data preventing FK creation
+            migrationBuilder.Sql("DELETE FROM \"SiteVisits\";");
+            migrationBuilder.Sql("DELETE FROM \"Avisos\";");
+
             migrationBuilder.CreateIndex(
                 name: "IX_Avisos_codcli",
                 table: "Avisos",

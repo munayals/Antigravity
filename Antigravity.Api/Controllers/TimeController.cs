@@ -191,6 +191,7 @@ namespace Antigravity.Api.Controllers
                     StartTime = DateTimeOffset.Now,
                     StartLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null,
                     StartLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null,
+                    StartClientTime = loc.ClientTime,
                     Status = "ACTIVE"
                 };
 
@@ -221,6 +222,7 @@ namespace Antigravity.Api.Controllers
                 workDay.EndTime = DateTimeOffset.Now;
                 workDay.EndLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null;
                 workDay.EndLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null;
+                workDay.EndClientTime = loc.ClientTime;
                 workDay.Status = "COMPLETED";
 
                 await _context.SaveChangesAsync();
@@ -263,6 +265,7 @@ namespace Antigravity.Api.Controllers
                 CheckInTime = DateTimeOffset.Now,
                 CheckInLat = req.Lat.HasValue ? (decimal)req.Lat.Value : null,
                 CheckInLng = req.Lng.HasValue ? (decimal)req.Lng.Value : null,
+                CheckInClientTime = req.ClientTime,
                 Status = "ACTIVE",
                 Description = "",       // non-null default
                 AttachmentPath = ""     // non-null default
@@ -301,6 +304,7 @@ namespace Antigravity.Api.Controllers
                 siteVisit.CheckOutTime = DateTimeOffset.Now;
                 siteVisit.CheckOutLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null;
                 siteVisit.CheckOutLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null;
+                siteVisit.CheckOutClientTime = loc.ClientTime;
                 siteVisit.Status = "COMPLETED";
 
                 // Mark linked Aviso as REALIZADO
@@ -337,6 +341,7 @@ namespace Antigravity.Api.Controllers
                 StartTime = DateTimeOffset.Now,
                 StartLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null,
                 StartLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null,
+                StartClientTime = loc.ClientTime,
                 Status = "ACTIVE"
             };
 
@@ -362,6 +367,7 @@ namespace Antigravity.Api.Controllers
                 breakObj.EndTime = DateTimeOffset.Now;
                 breakObj.EndLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null;
                 breakObj.EndLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null;
+                breakObj.EndClientTime = loc.ClientTime;
                 breakObj.Status = "COMPLETED";
 
                 await _context.SaveChangesAsync();
@@ -512,6 +518,7 @@ namespace Antigravity.Api.Controllers
     {
         public double? Lat { get; set; }
         public double? Lng { get; set; }
+        public DateTimeOffset? ClientTime { get; set; }
     }
 
     public class SiteEnterRequest : LocationRequest

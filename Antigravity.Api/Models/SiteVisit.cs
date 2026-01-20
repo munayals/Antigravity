@@ -28,6 +28,12 @@ namespace Antigravity.Api.Models
         [Column("check_out_time")]
         public DateTimeOffset? CheckOutTime { get; set; }
 
+        [Column("check_in_client_time")]
+        public DateTimeOffset? CheckInClientTime { get; set; }
+
+        [Column("check_out_client_time")]
+        public DateTimeOffset? CheckOutClientTime { get; set; }
+
         [Column("check_in_lat")]
         public decimal? CheckInLat { get; set; }
 

@@ -17,6 +17,12 @@ namespace Antigravity.Api.Models
         [Column("end_time")]
         public DateTimeOffset? EndTime { get; set; }
 
+        [Column("start_client_time")]
+        public DateTimeOffset? StartClientTime { get; set; }
+
+        [Column("end_client_time")]
+        public DateTimeOffset? EndClientTime { get; set; }
+
         [Column("start_lat")]
         public decimal? StartLat { get; set; }
 

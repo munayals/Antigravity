@@ -157,6 +157,20 @@ namespace Antigravity.Api.Controllers
             return Ok(existing);
         }
 
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteAviso(int id)
+        {
+            var aviso = await _context.Avisos.FindAsync(id);
+            if (aviso == null) return NotFound();
+
+            // Optional: Check if it can be deleted (e.g. not if it has related records like SiteVisits if FK restricts)
+            // For now, simple delete
+            _context.Avisos.Remove(aviso);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Aviso eliminado correctamente" });
+        }
+
         [HttpPut("{id}/status")]
         public async Task<IActionResult> ChangeStatus(int id, [FromBody] StatusChangeRequest request)
         {
