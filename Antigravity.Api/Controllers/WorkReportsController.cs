@@ -28,7 +28,7 @@ namespace Antigravity.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetReports([FromQuery] DateTime startDate, [FromQuery] DateTime endDate)
+        public async Task<IActionResult> GetReports([FromQuery] DateTimeOffset startDate, [FromQuery] DateTimeOffset endDate)
         {
             string userEmail = "demo@example.com"; 
 

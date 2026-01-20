@@ -23,10 +23,10 @@ namespace Antigravity.Api.Models
         public int? AvisoId { get; set; }
 
         [Column("check_in_time")]
-        public DateTime CheckInTime { get; set; }
+        public DateTimeOffset CheckInTime { get; set; }
 
         [Column("check_out_time")]
-        public DateTime? CheckOutTime { get; set; }
+        public DateTimeOffset? CheckOutTime { get; set; }
 
         [Column("check_in_lat")]
         public decimal? CheckInLat { get; set; }

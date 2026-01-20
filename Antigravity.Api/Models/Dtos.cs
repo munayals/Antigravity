@@ -22,10 +22,10 @@ namespace Antigravity.Api.Models
         public int? ClientId { get; set; }
         
         [System.Text.Json.Serialization.JsonPropertyName("startTime")]
-        public DateTime? StartTime { get; set; }
+        public DateTimeOffset? StartTime { get; set; }
         
         [System.Text.Json.Serialization.JsonPropertyName("endTime")]
-        public DateTime? EndTime { get; set; }
+        public DateTimeOffset? EndTime { get; set; }
         
         [System.Text.Json.Serialization.JsonPropertyName("description")]
         public string? Description { get; set; }
@@ -71,9 +71,9 @@ namespace Antigravity.Api.Models
 
     public class DayTimelineDto
     {
-        public DateTime Date { get; set; }
-        public DateTime? StartTime { get; set; }
-        public DateTime? EndTime { get; set; }
+        public DateTimeOffset Date { get; set; }
+        public DateTimeOffset? StartTime { get; set; }
+        public DateTimeOffset? EndTime { get; set; }
         public string TotalDuration { get; set; }
         
         // Stats
@@ -95,8 +95,8 @@ namespace Antigravity.Api.Models
         public string Type { get; set; }
         public string Title { get; set; }
         public string SubTitle { get; set; }
-        public DateTime Start { get; set; }
-        public DateTime? End { get; set; }
+        public DateTimeOffset Start { get; set; }
+        public DateTimeOffset? End { get; set; }
         public int DurationMinutes { get; set; }
         public string DurationFormatted { get; set; }
         public bool IsActive { get; set; }

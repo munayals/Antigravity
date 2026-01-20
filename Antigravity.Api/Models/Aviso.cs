@@ -11,7 +11,7 @@ namespace Antigravity.Api.Models
         public int ClientId { get; set; }
         
         [Column("request_time")]
-        public DateTime RequestTime { get; set; }
+        public DateTimeOffset RequestTime { get; set; }
         
         public string Reason { get; set; }
         public string Status { get; set; }
@@ -21,7 +21,7 @@ namespace Antigravity.Api.Models
         public decimal? EstimatedHours { get; set; }
         
         [Column("commitment_time")]
-        public DateTime? CommitmentTime { get; set; }
+        public DateTimeOffset? CommitmentTime { get; set; }
 
         [Column("user_email")]
         public string? UserEmail { get; set; }

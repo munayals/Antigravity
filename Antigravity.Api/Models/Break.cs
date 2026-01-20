@@ -14,10 +14,10 @@ namespace Antigravity.Api.Models
         public WorkDay WorkDay { get; set; }
 
         [Column("start_time")]
-        public DateTime StartTime { get; set; }
+        public DateTimeOffset StartTime { get; set; }
 
         [Column("end_time")]
-        public DateTime? EndTime { get; set; }
+        public DateTimeOffset? EndTime { get; set; }
 
         [Column("start_lat")]
         public decimal? StartLat { get; set; }

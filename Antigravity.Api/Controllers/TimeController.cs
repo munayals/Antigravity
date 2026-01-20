@@ -23,7 +23,9 @@ namespace Antigravity.Api.Controllers
         public async Task<IActionResult> GetStatus()
         {
             var email = GetUserEmail();
-            var today = DateTime.Today;
+            var now = DateTimeOffset.Now;
+            var todayStart = new DateTimeOffset(now.Year, now.Month, now.Day, 0, 0, 0, now.Offset);
+            var todayEnd = todayStart.AddDays(1);
 
             // 1. Get the latest WorkDay (Active OR Finished)
             var lastWorkDay = await _context.WorkDays
@@ -32,7 +34,7 @@ namespace Antigravity.Api.Controllers
                 .FirstOrDefaultAsync();
 
             bool isActive = (lastWorkDay != null && lastWorkDay.EndTime == null);
-            bool isToday = (lastWorkDay != null && lastWorkDay.StartTime.Date == today);
+            bool isToday = (lastWorkDay != null && lastWorkDay.StartTime >= todayStart && lastWorkDay.StartTime < todayEnd);
 
             // If the last workday was NOT today AND is not active, treat as no workday today
             if (!isToday && !isActive)
@@ -50,13 +52,13 @@ namespace Antigravity.Api.Controllers
             // Breaks
             var breaks = await _context.Breaks
                 .Include(b => b.WorkDay)
-                .Where(b => b.WorkDay.UserEmail == email && b.StartTime.Date == today)
+                .Where(b => b.WorkDay.UserEmail == email && b.StartTime >= todayStart && b.StartTime < todayEnd)
                 .OrderByDescending(b => b.StartTime)
                 .ToListAsync();
 
             foreach (var b in breaks)
             {
-                var endCalc = b.EndTime ?? DateTime.Now;
+                var endCalc = b.EndTime ?? DateTimeOffset.Now;
                 breakDurationMinutes += (int)(endCalc - b.StartTime).TotalMinutes;
 
                 string bStartAddress = null;
@@ -79,19 +81,19 @@ namespace Antigravity.Api.Controllers
             // Site Visits
             var siteVisits = await _context.SiteVisits
                 .Include(sv => sv.WorkDay)
-                .Where(sv => sv.WorkDay.UserEmail == email && sv.CheckInTime.Date == today)
+                .Where(sv => sv.WorkDay.UserEmail == email && sv.CheckInTime >= todayStart && sv.CheckInTime < todayEnd)
                 .ToListAsync();
 
             foreach (var sv in siteVisits)
             {
                 siteVisitCount++;
-                var endCalc = sv.CheckOutTime ?? DateTime.Now;
+                var endCalc = sv.CheckOutTime ?? DateTimeOffset.Now;
                 siteVisitDurationMinutes += (int)(endCalc - sv.CheckInTime).TotalMinutes;
             }
 
             // Get all sessions for TODAY
             var todayWorkDays = await _context.WorkDays
-                .Where(w => w.UserEmail == email && w.StartTime.Date == today)
+                .Where(w => w.UserEmail == email && w.StartTime >= todayStart && w.StartTime < todayEnd)
                 .OrderBy(w => w.StartTime)
                 .ToListAsync();
 
@@ -179,24 +181,30 @@ namespace Antigravity.Api.Controllers
         [HttpPost("workday/start")]
         public async Task<IActionResult> StartWorkDay([FromBody] LocationRequest loc)
         {
-            var email = GetUserEmail();
-            
-            // Check if already active? For now, logic says just insert new.
-            // Ideally check if one is active and close it or prevent start.
-            
-            var workDay = new WorkDay
+            try 
             {
-                UserEmail = email,
-                StartTime = DateTime.Now,
-                StartLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null,
-                StartLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null,
-                Status = "ACTIVE"
-            };
+                var email = GetUserEmail();
+                
+                var workDay = new WorkDay
+                {
+                    UserEmail = email,
+                    StartTime = DateTimeOffset.Now,
+                    StartLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null,
+                    StartLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null,
+                    Status = "ACTIVE"
+                };
 
-            _context.WorkDays.Add(workDay);
-            await _context.SaveChangesAsync();
+                _context.WorkDays.Add(workDay);
+                await _context.SaveChangesAsync();
 
-            return Ok();
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR in StartWorkDay: {ex.Message}");
+                if (ex.InnerException != null) Console.WriteLine($"INNER ERROR: {ex.InnerException.Message}");
+                return StatusCode(500, new { message = ex.Message });
+            }
         }
 
         [HttpPost("workday/end")]
@@ -210,7 +218,7 @@ namespace Antigravity.Api.Controllers
 
             if (workDay != null)
             {
-                workDay.EndTime = DateTime.Now;
+                workDay.EndTime = DateTimeOffset.Now;
                 workDay.EndLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null;
                 workDay.EndLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null;
                 workDay.Status = "COMPLETED";
@@ -237,7 +245,7 @@ namespace Antigravity.Api.Controllers
                 workDay = new WorkDay
                 {
                     UserEmail = email,
-                    StartTime = DateTime.Now,
+                    StartTime = DateTimeOffset.Now,
                     StartLat = req.Lat.HasValue ? (decimal)req.Lat.Value : null,
                     StartLng = req.Lng.HasValue ? (decimal)req.Lng.Value : null,
                     Status = "ACTIVE"
@@ -252,7 +260,7 @@ namespace Antigravity.Api.Controllers
                 SiteName = req.SiteName,
                 ClientId = req.ClientId,
                 AvisoId = req.AvisoId,
-                CheckInTime = DateTime.Now,
+                CheckInTime = DateTimeOffset.Now,
                 CheckInLat = req.Lat.HasValue ? (decimal)req.Lat.Value : null,
                 CheckInLng = req.Lng.HasValue ? (decimal)req.Lng.Value : null,
                 Status = "ACTIVE",
@@ -290,7 +298,7 @@ namespace Antigravity.Api.Controllers
 
             if (siteVisit != null)
             {
-                siteVisit.CheckOutTime = DateTime.Now;
+                siteVisit.CheckOutTime = DateTimeOffset.Now;
                 siteVisit.CheckOutLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null;
                 siteVisit.CheckOutLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null;
                 siteVisit.Status = "COMPLETED";
@@ -326,7 +334,7 @@ namespace Antigravity.Api.Controllers
             var breakObj = new Break
             {
                 WorkDayId = workDay.Id,
-                StartTime = DateTime.Now,
+                StartTime = DateTimeOffset.Now,
                 StartLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null,
                 StartLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null,
                 Status = "ACTIVE"
@@ -351,7 +359,7 @@ namespace Antigravity.Api.Controllers
 
             if (breakObj != null)
             {
-                breakObj.EndTime = DateTime.Now;
+                breakObj.EndTime = DateTimeOffset.Now;
                 breakObj.EndLat = loc.Lat.HasValue ? (decimal)loc.Lat.Value : null;
                 breakObj.EndLng = loc.Lng.HasValue ? (decimal)loc.Lng.Value : null;
                 breakObj.Status = "COMPLETED";
@@ -363,11 +371,11 @@ namespace Antigravity.Api.Controllers
         }
 
         [HttpGet("history")]
-        public async Task<IActionResult> GetHistory([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        public async Task<IActionResult> GetHistory([FromQuery] DateTimeOffset? startDate, [FromQuery] DateTimeOffset? endDate)
         {
             var email = GetUserEmail();
-            var start = startDate ?? DateTime.Today;
-            var end = endDate ?? DateTime.Today;
+            var start = startDate ?? DateTimeOffset.Now.Date;
+            var end = endDate ?? DateTimeOffset.Now.Date;
             end = end.Date.AddDays(1).AddTicks(-1);
 
             var timeline = new List<DayTimelineDto>();
@@ -397,7 +405,7 @@ namespace Antigravity.Api.Controllers
                 foreach (var sv in siteVisits)
                 {
                     var sEnd = sv.CheckOutTime;
-                    var duration = (int)((sEnd ?? DateTime.Now) - sv.CheckInTime).TotalMinutes;
+                    var duration = (int)((sEnd ?? DateTimeOffset.Now) - sv.CheckInTime).TotalMinutes;
                     rawEvents.Add(new TimelineEventDto
                     {
                         Id = "site-" + sv.Id,
@@ -420,7 +428,7 @@ namespace Antigravity.Api.Controllers
                 foreach (var b in breaks)
                 {
                     var bEnd = b.EndTime;
-                    var duration = (int)((bEnd ?? DateTime.Now) - b.StartTime).TotalMinutes;
+                    var duration = (int)((bEnd ?? DateTimeOffset.Now) - b.StartTime).TotalMinutes;
                     rawEvents.Add(new TimelineEventDto
                     {
                         Id = "break-" + b.Id,
@@ -456,10 +464,10 @@ namespace Antigravity.Api.Controllers
                         });
                     }
                     finalEvents.Add(evt);
-                    cursor = evt.End ?? DateTime.Now;
+                    cursor = evt.End ?? DateTimeOffset.Now;
                 }
 
-                var dayEnd = wd.EndTime ?? DateTime.Now;
+                var dayEnd = wd.EndTime ?? DateTimeOffset.Now;
                 if ((dayEnd - cursor).TotalMinutes > 1)
                 {
                     var gapMins = (int)(dayEnd - cursor).TotalMinutes;
@@ -484,7 +492,7 @@ namespace Antigravity.Api.Controllers
                 dayDto.DurationBreak = FormatDuration(dayDto.MinutesBreak);
                 dayDto.DurationGap = FormatDuration(dayDto.MinutesGap);
 
-                var totalMins = (int)((wd.EndTime ?? DateTime.Now) - wd.StartTime).TotalMinutes;
+                var totalMins = (int)((wd.EndTime ?? DateTimeOffset.Now) - wd.StartTime).TotalMinutes;
                 dayDto.TotalDuration = FormatDuration(totalMins);
 
                 timeline.Add(dayDto);

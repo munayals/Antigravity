@@ -26,7 +26,7 @@ namespace Antigravity.Api.Controllers
         private string GetUserEmail() => "demo@example.com";
 
         [HttpGet]
-        public async Task<IActionResult> GetAvisos([FromQuery] string? status, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        public async Task<IActionResult> GetAvisos([FromQuery] string? status, [FromQuery] DateTimeOffset? startDate, [FromQuery] DateTimeOffset? endDate)
         {
             var query = _context.Avisos
                 .Include(a => a.Client)
@@ -99,11 +99,8 @@ namespace Antigravity.Api.Controllers
         public async Task<ActionResult<Aviso>> CreateAviso([FromBody] Aviso aviso)
         {
             if (aviso.Id != 0) return BadRequest("No puede modificar un aviso desde este método");
-            
-            if (aviso.CommitmentTime?.Kind == DateTimeKind.Utc) 
-                aviso.CommitmentTime = aviso.CommitmentTime?.ToLocalTime();
 
-            aviso.RequestTime = DateTime.Now;
+            aviso.RequestTime = DateTimeOffset.Now;
             aviso.UserEmail = GetUserEmail();
 
             _repository.Add(aviso);
