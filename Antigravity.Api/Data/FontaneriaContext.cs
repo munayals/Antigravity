@@ -14,6 +14,7 @@ namespace Antigravity.Api.Data
         public DbSet<WorkDay> WorkDays { get; set; }
         public DbSet<Break> Breaks { get; set; }
         public DbSet<SiteVisit> SiteVisits { get; set; }
+        public DbSet<AvisoStatusHistory> AvisoStatusHistory { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -72,6 +73,15 @@ namespace Antigravity.Api.Data
                 modelBuilder.Entity<WorkDay>().ToTable("WorkDays");
                 modelBuilder.Entity<Break>().ToTable("Breaks");
                 modelBuilder.Entity<SiteVisit>().ToTable("SiteVisits");
+                
+                modelBuilder.Entity<AvisoStatusHistory>(entity =>
+                {
+                    entity.ToTable("AvisoStatusHistory");
+                    entity.HasOne(h => h.Aviso)
+                          .WithMany()
+                          .HasForeignKey(h => h.AvisoId)
+                          .OnDelete(DeleteBehavior.Cascade);
+                });
             }
         }
     }

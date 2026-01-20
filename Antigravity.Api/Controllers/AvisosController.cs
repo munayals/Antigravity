@@ -98,13 +98,44 @@ namespace Antigravity.Api.Controllers
         [HttpPost]
         public async Task<ActionResult<Aviso>> CreateAviso([FromBody] Aviso aviso)
         {
-            if (aviso.Id != 0) return BadRequest("No puede modificar un aviso desde este método");
+            if (aviso.Id != 0) return BadRequest(new { message = "No puede modificar un aviso desde este método" });
+
+            // Log incoming data for debugging
+            Console.WriteLine($"Creating aviso - ClientId: {aviso.ClientId}, Reason: {aviso.Reason}, Priority: {aviso.Priority}, Status: {aviso.Status}");
+
+            // Validate model state
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                var errorDetails = string.Join(", ", errors);
+                Console.WriteLine($"Model validation failed: {errorDetails}");
+                return BadRequest(new { message = "Errores de validación", errors = errors, details = errorDetails });
+            }
+
+            // Validate required fields manually with specific messages
+            if (aviso.ClientId <= 0)
+                return BadRequest(new { message = "El campo 'Cliente' es obligatorio. Por favor selecciona un cliente." });
+
+            if (string.IsNullOrWhiteSpace(aviso.Reason))
+                return BadRequest(new { message = "El campo 'Motivo' es obligatorio. Por favor describe el motivo del aviso." });
+
+            if (string.IsNullOrWhiteSpace(aviso.Priority))
+                return BadRequest(new { message = "El campo 'Prioridad' es obligatorio. Por favor selecciona una prioridad." });
+
+            // Set default status if not provided
+            if (string.IsNullOrWhiteSpace(aviso.Status))
+            {
+                aviso.Status = "RECEPCIONADO";
+                Console.WriteLine("Status was empty, set to RECEPCIONADO");
+            }
 
             aviso.RequestTime = DateTimeOffset.Now;
             aviso.UserEmail = GetUserEmail();
 
             _repository.Add(aviso);
             await _repository.SaveChangesAsync();
+
+            await AddStatusHistory(aviso.Id, aviso.Status ?? "RECEPCIONADO", "Aviso creado");
 
             return Ok(aviso);
         }
@@ -122,7 +153,58 @@ namespace Antigravity.Api.Controllers
             existing.CommitmentTime = aviso.CommitmentTime;
 
             await _context.SaveChangesAsync();
-            return Ok();
+
+            return Ok(existing);
         }
+
+        [HttpPut("{id}/status")]
+        public async Task<IActionResult> ChangeStatus(int id, [FromBody] StatusChangeRequest request)
+        {
+            var aviso = await _context.Avisos.FindAsync(id);
+            if (aviso == null) return NotFound();
+
+            var oldStatus = aviso.Status;
+            aviso.Status = request.NewStatus;
+
+            await _context.SaveChangesAsync();
+
+            // TODO: Uncomment when AvisoStatusHistory table is created
+            // Add to history
+            // await AddStatusHistory(id, request.NewStatus, request.Notes);
+
+            return Ok(new { oldStatus, newStatus = request.NewStatus });
+        }
+
+        [HttpGet("{id}/status-history")]
+        public async Task<IActionResult> GetStatusHistory(int id)
+        {
+            var history = await _context.AvisoStatusHistory
+                .Where(h => h.AvisoId == id)
+                .OrderByDescending(h => h.ChangedAt)
+                .ToListAsync();
+
+            return Ok(history);
+        }
+
+        private async Task AddStatusHistory(int avisoId, string status, string? notes = null)
+        {
+            var history = new AvisoStatusHistory
+            {
+                AvisoId = avisoId,
+                Status = status,
+                ChangedAt = DateTimeOffset.Now,
+                ChangedBy = GetUserEmail(),
+                Notes = notes
+            };
+
+            _context.AvisoStatusHistory.Add(history);
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    public class StatusChangeRequest
+    {
+        public string NewStatus { get; set; } = string.Empty;
+        public string? Notes { get; set; }
     }
 }

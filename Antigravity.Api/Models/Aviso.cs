@@ -13,9 +13,9 @@ namespace Antigravity.Api.Models
         [Column("request_time")]
         public DateTimeOffset RequestTime { get; set; }
         
-        public string Reason { get; set; }
-        public string Status { get; set; }
-        public string Priority { get; set; }
+        public string? Reason { get; set; }
+        public string? Status { get; set; }
+        public string? Priority { get; set; }
         
         [Column("estimated_hours")]
         public decimal? EstimatedHours { get; set; }
@@ -26,7 +26,7 @@ namespace Antigravity.Api.Models
         [Column("user_email")]
         public string? UserEmail { get; set; }
 
-        public Client Client { get; set; }
+        public Client? Client { get; set; }
     }
 
     public class AvisoWithClientDto : Aviso
