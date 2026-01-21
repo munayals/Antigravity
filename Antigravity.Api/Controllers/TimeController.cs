@@ -450,11 +450,18 @@ namespace Antigravity.Api.Controllers
                     var sEnd = sv.CheckOutTime;
                     var duration = (int)((sEnd ?? DateTimeOffset.Now) - sv.CheckInTime).TotalMinutes;
                     
-                    string address = sv.SiteName;
+
+                    
+                    string startAddr = null;
                     if (sv.CheckInLat.HasValue && sv.CheckInLng.HasValue)
                     {
-                         var geoAddr = await GeocodingUtils.GetAddressAsync((double)sv.CheckInLat.Value, (double)sv.CheckInLng.Value);
-                         if (!string.IsNullOrEmpty(geoAddr)) address += $" - {geoAddr}";
+                         startAddr = await GeocodingUtils.GetAddressAsync((double)sv.CheckInLat.Value, (double)sv.CheckInLng.Value);
+                    }
+
+                    string endAddr = null;
+                    if (sv.CheckOutLat.HasValue && sv.CheckOutLng.HasValue)
+                    {
+                         endAddr = await GeocodingUtils.GetAddressAsync((double)sv.CheckOutLat.Value, (double)sv.CheckOutLng.Value);
                     }
 
                     rawEvents.Add(new TimelineEventDto
@@ -462,7 +469,9 @@ namespace Antigravity.Api.Controllers
                         Id = "site-" + sv.Id,
                         Type = "SITE",
                         Title = sv.SiteName,
-                        SubTitle = address, // This will show in Agenda
+                        SubTitle = sv.Description, // Use description if available, or keep empty
+                        StartAddress = startAddr,
+                        EndAddress = endAddr,
                         Start = sv.CheckInTime,
                         End = sEnd,
                         IsActive = sEnd == null,
@@ -482,11 +491,18 @@ namespace Antigravity.Api.Controllers
                     var bEnd = b.EndTime;
                     var duration = (int)((bEnd ?? DateTimeOffset.Now) - b.StartTime).TotalMinutes;
                     
-                    string bAddr = "Descanso";
+
+                    
+                    string bStartAddr = null;
                     if (b.StartLat.HasValue && b.StartLng.HasValue)
                     {
-                        var geoAddr = await GeocodingUtils.GetAddressAsync((double)b.StartLat.Value, (double)b.StartLng.Value);
-                        if (!string.IsNullOrEmpty(geoAddr)) bAddr += $" - {geoAddr}";
+                        bStartAddr = await GeocodingUtils.GetAddressAsync((double)b.StartLat.Value, (double)b.StartLng.Value);
+                    }
+
+                    string bEndAddr = null;
+                    if (b.EndLat.HasValue && b.EndLng.HasValue)
+                    {
+                        bEndAddr = await GeocodingUtils.GetAddressAsync((double)b.EndLat.Value, (double)b.EndLng.Value);
                     }
 
                     rawEvents.Add(new TimelineEventDto
@@ -494,7 +510,9 @@ namespace Antigravity.Api.Controllers
                         Id = "break-" + b.Id,
                         Type = "BREAK",
                         Title = "Descanso",
-                        SubTitle = bAddr, // This will show in Agenda
+                        SubTitle = null,
+                        StartAddress = bStartAddr,
+                        EndAddress = bEndAddr,
                         Start = b.StartTime,
                         End = bEnd,
                         IsActive = bEnd == null,

@@ -98,6 +98,8 @@ namespace Antigravity.Api.Models
         public string Type { get; set; }
         public string Title { get; set; }
         public string SubTitle { get; set; }
+        public string StartAddress { get; set; } 
+        public string EndAddress { get; set; }
         public DateTimeOffset Start { get; set; }
         public DateTimeOffset? End { get; set; }
         public int DurationMinutes { get; set; }
