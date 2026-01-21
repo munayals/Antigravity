@@ -59,11 +59,10 @@ namespace Antigravity.Api.Controllers
                 .OrderByDescending(b => b.StartTime)
                 .ToListAsync();
 
-            foreach (var b in breaks)
+            var breakTasks = breaks.Select(async b =>
             {
                 var endCalc = b.EndTime ?? DateTimeOffset.Now;
-                breakDurationMinutes += (int)(endCalc - b.StartTime).TotalMinutes;
-
+                
                 string bStartAddress = null;
                 if (b.StartLat.HasValue && b.StartLng.HasValue)
                     bStartAddress = await GeocodingUtils.GetAddressAsync((double)b.StartLat, (double)b.StartLng);
@@ -72,12 +71,26 @@ namespace Antigravity.Api.Controllers
                 if (b.EndLat.HasValue && b.EndLng.HasValue)
                     bEndAddress = await GeocodingUtils.GetAddressAsync((double)b.EndLat, (double)b.EndLng);
 
+                return new
+                {
+                    Break = b,
+                    Duration = (int)(endCalc - b.StartTime).TotalMinutes,
+                    StartAddress = bStartAddress,
+                    EndAddress = bEndAddress
+                };
+            });
+
+            var breakResults = await Task.WhenAll(breakTasks);
+
+            foreach (var res in breakResults)
+            {
+                breakDurationMinutes += res.Duration;
                 breaksList.Add(new
                 {
-                    startTime = b.StartTime,
-                    endTime = b.EndTime,
-                    startAddress = bStartAddress,
-                    endAddress = bEndAddress
+                    startTime = res.Break.StartTime,
+                    endTime = res.Break.EndTime,
+                    startAddress = res.StartAddress,
+                    endAddress = res.EndAddress
                 });
             }
 
