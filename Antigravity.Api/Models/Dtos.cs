@@ -85,6 +85,9 @@ namespace Antigravity.Api.Models
         public string DurationSite { get; set; }
         public string DurationBreak { get; set; }
         public string DurationGap { get; set; }
+        
+        public string? StartAddress { get; set; }
+        public string? EndAddress { get; set; }
 
         public List<TimelineEventDto> Events { get; set; } = new List<TimelineEventDto>();
     }

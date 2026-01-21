@@ -85,17 +85,6 @@ namespace Antigravity.Api.Controllers
                  reports.Add(report);
             }
 
-            // Resolve addresses in parallel
-            var tasks = reports.Select(async r => {
-                if (r.LocationsMatch) {
-                    r.CheckInAddress = await GeocodingUtils.GetAddressAsync(r.CheckInLoc.Lat, r.CheckInLoc.Lng);
-                    r.CheckOutAddress = r.CheckInAddress;
-                } else {
-                    r.CheckInAddress = await GeocodingUtils.GetAddressAsync(r.CheckInLoc.Lat, r.CheckInLoc.Lng);
-                    r.CheckOutAddress = await GeocodingUtils.GetAddressAsync(r.CheckOutLoc.Lat, r.CheckOutLoc.Lng);
-                }
-            });
-            await Task.WhenAll(tasks);
 
             return Ok(reports);
         }
@@ -114,9 +103,6 @@ namespace Antigravity.Api.Controllers
             // 2. Map to DTO
             var report = _mapper.Map<WorkReportDto>(siteVisit);
 
-            // 3. Resolve Addresses (Logic remains in Controller/Service layer as it involves external API)
-            report.CheckInAddress = await GeocodingUtils.GetAddressAsync(report.CheckInLoc?.Lat, report.CheckInLoc?.Lng);
-            report.CheckOutAddress = await GeocodingUtils.GetAddressAsync(report.CheckOutLoc?.Lat, report.CheckOutLoc?.Lng);
 
             return Ok(report);
         }

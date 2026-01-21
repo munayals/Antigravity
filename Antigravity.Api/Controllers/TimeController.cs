@@ -59,28 +59,17 @@ namespace Antigravity.Api.Controllers
                 .OrderByDescending(b => b.StartTime)
                 .ToListAsync();
 
-            var breakTasks = breaks.Select(async b =>
+            var breakResults = breaks.Select(b =>
             {
                 var endCalc = b.EndTime ?? DateTimeOffset.Now;
-                
-                string bStartAddress = null;
-                if (b.StartLat.HasValue && b.StartLng.HasValue)
-                    bStartAddress = await GeocodingUtils.GetAddressAsync((double)b.StartLat, (double)b.StartLng);
-
-                string bEndAddress = null;
-                if (b.EndLat.HasValue && b.EndLng.HasValue)
-                    bEndAddress = await GeocodingUtils.GetAddressAsync((double)b.EndLat, (double)b.EndLng);
-
                 return new
                 {
                     Break = b,
                     Duration = (int)(endCalc - b.StartTime).TotalMinutes,
-                    StartAddress = bStartAddress,
-                    EndAddress = bEndAddress
+                    StartAddress = (string)null,
+                    EndAddress = (string)null
                 };
-            });
-
-            var breakResults = await Task.WhenAll(breakTasks);
+            }).ToList();
 
             foreach (var res in breakResults)
             {
@@ -136,8 +125,9 @@ namespace Antigravity.Api.Controllers
             if (activeSite != null)
             {
                 string addr = null;
-                if (activeSite.CheckInLat.HasValue && activeSite.CheckInLng.HasValue)
-                    addr = await GeocodingUtils.GetAddressAsync((double)activeSite.CheckInLat, (double)activeSite.CheckInLng);
+                // Removed Geocoding for dashboard
+                // if (activeSite.CheckInLat.HasValue && activeSite.CheckInLng.HasValue)
+                //    addr = await GeocodingUtils.GetAddressAsync((double)activeSite.CheckInLat, (double)activeSite.CheckInLng);
 
                 activeSiteDto = new
                 {
@@ -158,8 +148,9 @@ namespace Antigravity.Api.Controllers
             if (activeBreak != null)
             {
                 string addr = null;
-                if (activeBreak.StartLat.HasValue && activeBreak.StartLng.HasValue)
-                    addr = await GeocodingUtils.GetAddressAsync((double)activeBreak.StartLat, (double)activeBreak.StartLng);
+                // Removed Geocoding for dashboard
+                // if (activeBreak.StartLat.HasValue && activeBreak.StartLng.HasValue)
+                //    addr = await GeocodingUtils.GetAddressAsync((double)activeBreak.StartLat, (double)activeBreak.StartLng);
 
                 activeBreakDto = new
                 {
@@ -172,7 +163,7 @@ namespace Antigravity.Api.Controllers
             string lastStartAddress = null;
             if (lastWorkDay != null && lastWorkDay.StartLat.HasValue && lastWorkDay.StartLng.HasValue)
             {
-                lastStartAddress = await GeocodingUtils.GetAddressAsync((double)lastWorkDay.StartLat, (double)lastWorkDay.StartLng);
+                // lastStartAddress = await GeocodingUtils.GetAddressAsync((double)lastWorkDay.StartLat, (double)lastWorkDay.StartLng);
             }
 
             return Ok(new
@@ -415,14 +406,36 @@ namespace Antigravity.Api.Controllers
                 .OrderByDescending(w => w.StartTime)
                 .ToListAsync();
 
-            foreach (var wd in workDays)
-            {
+            // Prepare parallel geocoding tasks for all days
+            var dayTasks = workDays.Select(async wd => {
                 var dayDto = new DayTimelineDto
                 {
                     Date = wd.StartTime.Date,
                     StartTime = wd.StartTime,
                     EndTime = wd.EndTime
                 };
+
+                // Resolve Start Address
+                if (wd.StartLat.HasValue && wd.StartLng.HasValue)
+                {
+                    dayDto.StartAddress = await GeocodingUtils.GetAddressAsync((double)wd.StartLat, (double)wd.StartLng);
+                }
+
+                // Resolve End Address
+                if (wd.EndLat.HasValue && wd.EndLng.HasValue)
+                {
+                    dayDto.EndAddress = await GeocodingUtils.GetAddressAsync((double)wd.EndLat, (double)wd.EndLng);
+                }
+                
+                return new { WorkDay = wd, Dto = dayDto };
+            });
+
+            var processedDays = await Task.WhenAll(dayTasks);
+
+            foreach (var item in processedDays)
+            {
+                var wd = item.WorkDay;
+                var dayDto = item.Dto;
 
                 var rawEvents = new List<TimelineEventDto>();
 
@@ -436,11 +449,20 @@ namespace Antigravity.Api.Controllers
                 {
                     var sEnd = sv.CheckOutTime;
                     var duration = (int)((sEnd ?? DateTimeOffset.Now) - sv.CheckInTime).TotalMinutes;
+                    
+                    string address = sv.SiteName;
+                    if (sv.CheckInLat.HasValue && sv.CheckInLng.HasValue)
+                    {
+                         var geoAddr = await GeocodingUtils.GetAddressAsync((double)sv.CheckInLat.Value, (double)sv.CheckInLng.Value);
+                         if (!string.IsNullOrEmpty(geoAddr)) address += $" - {geoAddr}";
+                    }
+
                     rawEvents.Add(new TimelineEventDto
                     {
                         Id = "site-" + sv.Id,
                         Type = "SITE",
                         Title = sv.SiteName,
+                        SubTitle = address, // This will show in Agenda
                         Start = sv.CheckInTime,
                         End = sEnd,
                         IsActive = sEnd == null,
@@ -459,11 +481,20 @@ namespace Antigravity.Api.Controllers
                 {
                     var bEnd = b.EndTime;
                     var duration = (int)((bEnd ?? DateTimeOffset.Now) - b.StartTime).TotalMinutes;
+                    
+                    string bAddr = "Descanso";
+                    if (b.StartLat.HasValue && b.StartLng.HasValue)
+                    {
+                        var geoAddr = await GeocodingUtils.GetAddressAsync((double)b.StartLat.Value, (double)b.StartLng.Value);
+                        if (!string.IsNullOrEmpty(geoAddr)) bAddr += $" - {geoAddr}";
+                    }
+
                     rawEvents.Add(new TimelineEventDto
                     {
                         Id = "break-" + b.Id,
                         Type = "BREAK",
                         Title = "Descanso",
+                        SubTitle = bAddr, // This will show in Agenda
                         Start = b.StartTime,
                         End = bEnd,
                         IsActive = bEnd == null,
