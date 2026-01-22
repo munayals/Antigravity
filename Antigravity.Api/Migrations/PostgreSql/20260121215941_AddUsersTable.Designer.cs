@@ -3,6 +3,7 @@ using System;
 using Antigravity.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Antigravity.Api.Migrations.PostgreSql
 {
     [DbContext(typeof(FontaneriaContext))]
-    partial class FontaneriaContextModelSnapshot : ModelSnapshot
+    [Migration("20260121215941_AddUsersTable")]
+    partial class AddUsersTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -240,10 +243,6 @@ namespace Antigravity.Api.Migrations.PostgreSql
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<double?>("ReportedHours")
-                        .HasColumnType("double precision")
-                        .HasColumnName("reported_hours");
 
                     b.Property<string>("SiteName")
                         .HasColumnType("text")

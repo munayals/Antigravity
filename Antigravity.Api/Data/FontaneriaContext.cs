@@ -15,6 +15,7 @@ namespace Antigravity.Api.Data
         public DbSet<Break> Breaks { get; set; }
         public DbSet<SiteVisit> SiteVisits { get; set; }
         public DbSet<AvisoStatusHistory> AvisoStatusHistory { get; set; }
+        public DbSet<User> Users { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -81,6 +82,12 @@ namespace Antigravity.Api.Data
                           .WithMany()
                           .HasForeignKey(h => h.AvisoId)
                           .OnDelete(DeleteBehavior.Cascade);
+                });
+
+                modelBuilder.Entity<User>(entity =>
+                {
+                    entity.ToTable("Users");
+                    entity.HasIndex(u => u.Email).IsUnique();
                 });
             }
         }

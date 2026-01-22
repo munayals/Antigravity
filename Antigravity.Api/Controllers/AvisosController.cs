@@ -23,14 +23,29 @@ namespace Antigravity.Api.Controllers
             _mapper = mapper;
         }
 
-        private string GetUserEmail() => "demo@example.com";
+        private string GetUserEmail()
+        {
+            if (Request.Headers.TryGetValue("X-User-Email", out var email))
+            {
+                return email.ToString();
+            }
+            return "admin@antigravity.com";
+        }
 
         [HttpGet]
-        public async Task<IActionResult> GetAvisos([FromQuery] string? status, [FromQuery] DateTimeOffset? startDate, [FromQuery] DateTimeOffset? endDate)
+        public async Task<IActionResult> GetAvisos([FromQuery] string? status, [FromQuery] DateTimeOffset? startDate, [FromQuery] DateTimeOffset? endDate, [FromQuery] string? userEmail = null)
         {
             var query = _context.Avisos
                 .Include(a => a.Client)
                 .AsQueryable();
+
+            // If userEmail is provided, filter by it. 
+            // If NOT provided, do NOT filter (Admin view or legacy).
+            // NOTE: For non-admins, the frontend MUST pass the email to see only their avisos.
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                query = query.Where(a => a.UserEmail == userEmail);
+            }
 
             if (!string.IsNullOrEmpty(status))
                 query = query.Where(a => a.Status == status);
@@ -62,6 +77,7 @@ namespace Antigravity.Api.Controllers
                 ClientPhone = a.Client.Phone ?? "",
                 ClientCity = a.Client.City ?? ""
             }).ToListAsync();
+
 
             return Ok(result);
         }

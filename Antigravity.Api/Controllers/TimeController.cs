@@ -20,12 +20,19 @@ namespace Antigravity.Api.Controllers
             _whatsAppService = whatsAppService;
         }
 
-        private string GetUserEmail() => "demo@example.com";
+        private string GetUserEmail()
+        {
+            if (Request.Headers.TryGetValue("X-User-Email", out var email))
+            {
+                return email.ToString();
+            }
+            return "admin@antigravity.com";
+        }
 
         [HttpGet("status")]
-        public async Task<IActionResult> GetStatus()
+        public async Task<IActionResult> GetStatus([FromQuery] string? userEmail = null)
         {
-            var email = GetUserEmail();
+            var email = userEmail ?? GetUserEmail();
             var now = DateTimeOffset.Now;
             var todayStart = new DateTimeOffset(now.Year, now.Month, now.Day, 0, 0, 0, now.Offset);
             var todayEnd = todayStart.AddDays(1);
@@ -392,9 +399,9 @@ namespace Antigravity.Api.Controllers
         }
 
         [HttpGet("history")]
-        public async Task<IActionResult> GetHistory([FromQuery] DateTimeOffset? startDate, [FromQuery] DateTimeOffset? endDate)
+        public async Task<IActionResult> GetHistory([FromQuery] DateTimeOffset? startDate, [FromQuery] DateTimeOffset? endDate, [FromQuery] string? userEmail = null)
         {
-            var email = GetUserEmail();
+            var email = userEmail ?? GetUserEmail();
             var start = startDate ?? DateTimeOffset.Now.Date;
             var end = endDate ?? DateTimeOffset.Now.Date;
             end = end.Date.AddDays(1).AddTicks(-1);
@@ -406,8 +413,11 @@ namespace Antigravity.Api.Controllers
                 .OrderByDescending(w => w.StartTime)
                 .ToListAsync();
 
-            // Prepare parallel geocoding tasks for all days
-            var dayTasks = workDays.Select(async wd => {
+            // Process days sequentially to avoid rate limiting on Geocoding API
+            var processedDays = new List<(WorkDay WorkDay, DayTimelineDto Dto)>();
+
+            foreach (var wd in workDays) 
+            {
                 var dayDto = new DayTimelineDto
                 {
                     Date = wd.StartTime.Date,
@@ -427,10 +437,8 @@ namespace Antigravity.Api.Controllers
                     dayDto.EndAddress = await GeocodingUtils.GetAddressAsync((double)wd.EndLat, (double)wd.EndLng);
                 }
                 
-                return new { WorkDay = wd, Dto = dayDto };
-            });
-
-            var processedDays = await Task.WhenAll(dayTasks);
+                processedDays.Add((wd, dayDto));
+            }
 
             foreach (var item in processedDays)
             {

@@ -27,6 +27,9 @@ namespace Antigravity.Api.Models
         [System.Text.Json.Serialization.JsonPropertyName("endTime")]
         public DateTimeOffset? EndTime { get; set; }
         
+        [System.Text.Json.Serialization.JsonPropertyName("hours")]
+        public double Hours { get; set; }
+        
         [System.Text.Json.Serialization.JsonPropertyName("description")]
         public string? Description { get; set; }
         
@@ -66,6 +69,7 @@ namespace Antigravity.Api.Models
         public string? SiteName { get; set; }
         public int? ClientId { get; set; }
         public string? Description { get; set; }
+        public double? Hours { get; set; } // Added
         public string? AttachmentPath { get; set; }
     }
 

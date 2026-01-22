@@ -53,6 +53,9 @@ namespace Antigravity.Api.Models
 
         public string Status { get; set; } = "ACTIVE"; // 'ACTIVE', 'COMPLETED'
 
+        [Column("reported_hours")]
+        public double? ReportedHours { get; set; }
+
         // Extra property from JOIN (Not mapped to DB table directly, handle via DTO projection ideally)
         [NotMapped]
         public string ClientName { get; set; }

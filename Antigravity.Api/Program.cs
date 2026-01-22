@@ -21,10 +21,11 @@ builder.Services.AddCors(options =>
             policy.WithOrigins(
                 "http://localhost:4200", 
                 "http://192.168.1.148:4200",
-                "https://turnomagico-angular.vercel.app",
-                "https://antigravity-angular.vercel.app")
+                "https://antigravity-angular.vercel.app",
+                "https://turnomagico-angular.vercel.app")
                   .AllowAnyHeader()
-                  .AllowAnyMethod();
+                  .AllowAnyMethod()
+                  .AllowCredentials();
         });
 });
 
